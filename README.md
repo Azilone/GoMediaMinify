@@ -34,12 +34,12 @@ Convert your photos and videos to modern formats while saving tons of space. Saf
 Here's what happens when you convert a typical SD card from a camera:
 
 ### Before Conversion
-![SD Card Before](https://github.com/kevindurb/media-converter/raw/main/docs/images/before-conversion.png)
-*SD card with mixed photos and videos - 64GB nearly full*
+![SD Card Before](https://github.com/Azilone/Convertisseur-Image-Video/blob/main/docs/images/before-conversion.png)
+*SD card with mixed photos and videos - +100GB*
 
 ### After Conversion  
-![SD Card After](https://github.com/kevindurb/media-converter/raw/main/docs/images/after-conversion.png)
-*Same content converted - only 18GB used, organized by date*
+![SD Card After](https://github.com/Azilone/Convertisseur-Image-Video/blob/main/docs/images/after-conversion.png)
+*Same content converted - only 10GB used, organized by date*
 
 **Result**: 72% space saved, photos organized by actual date taken, originals preserved safely.
 
