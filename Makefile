@@ -39,7 +39,7 @@ install: ## Install the binary to GOPATH/bin
 
 ## Cross-compilation
 
-cross-compile: ## Build for multiple platforms
+cross-compile: ## Build for multiple platforms (detailed names)
 	@echo "Cross-compiling..."
 	@mkdir -p $(BUILD_DIR)
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
@@ -48,6 +48,27 @@ cross-compile: ## Build for multiple platforms
 	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 	@echo "Cross-compilation complete! Binaries in $(BUILD_DIR)/"
+
+release-binaries: ## Build release binaries with architecture-specific names for GitHub
+	@echo "Building release binaries..."
+	@mkdir -p $(BUILD_DIR)
+	# macOS builds
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-macos-intel $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-macos-apple-silicon $(MAIN_PATH)
+	# Linux builds
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
+	# Windows build
+	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
+	@echo ""
+	@echo "✅ Release binaries ready in $(BUILD_DIR)/:"
+	@echo "   • $(BINARY_NAME)-macos-intel (macOS Intel x64)"
+	@echo "   • $(BINARY_NAME)-macos-apple-silicon (macOS M1/M2/M3/M4)"
+	@echo "   • $(BINARY_NAME)-linux-amd64 (Linux x64)"
+	@echo "   • $(BINARY_NAME)-linux-arm64 (Linux ARM64)"
+	@echo "   • $(BINARY_NAME)-windows-amd64.exe (Windows x64)"
+	@echo ""
+	@echo "Ready to upload to GitHub Releases!"
 
 ## Development commands
 
@@ -78,12 +99,12 @@ run: build-local ## Build and run with example parameters
 
 ## Release commands
 
-release-prep: ## Prepare for release (clean, test, cross-compile)
+release-prep: ## Prepare for release (clean, test, release-binaries)
 	@echo "Preparing release..."
 	$(MAKE) clean
 	$(MAKE) deps
 	$(MAKE) test
-	$(MAKE) cross-compile
+	$(MAKE) release-binaries
 	@echo "Release preparation complete!"
 
 ## Docker commands (future)

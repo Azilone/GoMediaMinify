@@ -9,9 +9,11 @@ Convert your photos and videos to modern formats while saving tons of space. Saf
 ### 📥 Download (No Building Required)
 1. Go to [Releases](https://github.com/kevindurb/media-converter/releases)
 2. Download the version for your system:
-   - **Windows**: `media-converter-windows.exe`
-   - **macOS**: `media-converter-macos`
-   - **Linux**: `media-converter-linux`
+   - **Windows**: `media-converter-windows-amd64.exe`
+   - **macOS Intel**: `media-converter-macos-intel` (older Macs)
+   - **macOS Apple Silicon**: `media-converter-macos-apple-silicon` (M1/M2/M3/M4)
+   - **Linux x64**: `media-converter-linux-amd64`
+   - **Linux ARM**: `media-converter-linux-arm64` (Raspberry Pi, etc.)
 
 ### 🔧 Install Dependencies
 **macOS**: `brew install ffmpeg imagemagick`  
