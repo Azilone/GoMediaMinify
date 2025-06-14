@@ -1,13 +1,17 @@
-# Media Converter
-
-Convert your photos and videos to modern formats while saving tons of space. Safe, fast, and easy to use.
+<div align="center">
+  <img src="https://github.com/Azilone/GoMediaMinify/blob/main/docs/images/logo.png" alt="GoMediaMinify Logo" width="120" height="120">
+  
+  # GoMediaMinify
+  
+  **Convert your photos and videos to modern formats while saving tons of space. Safe, fast, and easy to use.**
+</div>
 
 ## Quick Start (Non-Technical Users)
 
 **Just want to use it right away?** Download the ready-to-use program:
 
 ### 📥 Download (No Building Required)
-1. Go to [Releases](https://github.com/kevindurb/media-converter/releases)
+1. Go to [Releases](https://github.com/Azilone/GoMediaMinify/releases)
 2. Download the version for your system:
    - **Windows**: `media-converter-windows-amd64.exe`
    - **macOS Intel**: `media-converter-macos-intel` (older Macs)
@@ -23,10 +27,10 @@ Convert your photos and videos to modern formats while saving tons of space. Saf
 ### 🚀 Use It
 ```bash
 # Test first (see what happens without changing anything)
-./media-converter --dry-run /path/to/your/photos /path/to/converted
+./gomediaminify --dry-run /path/to/your/photos /path/to/converted
 
 # Convert safely (keeps your originals)
-./media-converter /path/to/your/photos /path/to/converted
+./gomediaminify /path/to/your/photos /path/to/converted
 ```
 
 ## Real Example: Before & After
@@ -34,11 +38,11 @@ Convert your photos and videos to modern formats while saving tons of space. Saf
 Here's what happens when you convert a typical SD card from a camera:
 
 ### Before Conversion
-![SD Card Before](https://github.com/Azilone/Convertisseur-Image-Video/blob/main/docs/images/before-conversion.png)
+![SD Card Before](https://github.com/Azilone/GoMediaMinify/blob/main/docs/images/before-conversion.png)
 *SD card with mixed photos and videos - +100GB*
 
 ### After Conversion  
-![SD Card After](https://github.com/Azilone/Convertisseur-Image-Video/blob/main/docs/images/after-conversion.png)
+![SD Card After](https://github.com/Azilone/GoMediaMinify/blob/main/docs/images/after-conversion.png)
 *Same content converted - only 10GB used, organized by date*
 
 **Result**: 72% space saved, photos organized by actual date taken, originals preserved safely.
@@ -55,19 +59,19 @@ Here's what happens when you convert a typical SD card from a camera:
 
 **Family Photos**
 ```bash
-./media-converter ~/Pictures/Family ~/Pictures/Family_Converted
+./gomediaminify ~/Pictures/Family ~/Pictures/Family_Converted
 # Result: 20GB → 6GB, organized by date, originals safe
 ```
 
 **Vacation Videos**
 ```bash
-./media-converter --video-codec=h265 ~/Videos/Vacation ~/Videos/Vacation_Converted
+./gomediaminify --video-codec=h265 ~/Videos/Vacation ~/Videos/Vacation_Converted
 # Result: 4K videos 50% smaller, same quality
 ```
 
 **Camera SD Card**
 ```bash
-./media-converter /Volumes/SD_CARD ~/Desktop/Converted_Photos
+./gomediaminify /Volumes/SD_CARD ~/Desktop/Converted_Photos
 # Result: Clean organization by date, massive space savings
 ```
 
@@ -88,12 +92,12 @@ Here's what happens when you convert a typical SD card from a camera:
 ## Installation Options
 
 ### Option 1: Download Binary (Easiest)
-Go to [Releases](https://github.com/kevindurb/media-converter/releases) and download for your platform.
+Go to [Releases](https://github.com/Azilone/GoMediaMinify/releases) and download for your platform.
 
 ### Option 2: Build from Source
 ```bash
-git clone https://github.com/kevindurb/media-converter.git
-cd media-converter
+git clone https://github.com/Azilone/GoMediaMinify.git
+cd GoMediaMinify
 go build -o media-converter
 ```
 
