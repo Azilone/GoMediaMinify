@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/kevindurb/media-converter/internal/config"
 	"github.com/kevindurb/media-converter/internal/converter"
 	"github.com/kevindurb/media-converter/internal/logger"
 	"github.com/kevindurb/media-converter/internal/utils"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"os"
+	"path/filepath"
 )
 
 var (
@@ -98,7 +98,7 @@ func init() {
 
 	// Organization flags
 	rootCmd.Flags().BoolP("organize-by-date", "o", true, "Organize files by date")
-	rootCmd.Flags().String("language", "fr", "Language for month names (en, fr, es, de)")
+	rootCmd.Flags().String("language", "en", "Language for month names (en, fr, es, de)")
 
 	// Security flags
 	rootCmd.Flags().Int("timeout-photo", 300, "Timeout for photo conversion in seconds")

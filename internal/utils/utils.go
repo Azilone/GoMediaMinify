@@ -222,7 +222,7 @@ func CreateDestinationPath(baseDir string, fileDate time.Time, mediaType string,
 	}
 
 	year := strconv.Itoa(fileDate.Year())
-	monthName := GetMonthName(int(fileDate.Month()), "fr") // Default to French as in original
+	monthName := GetMonthName(int(fileDate.Month()), "en") // Default to English
 	dayStr := fileDate.Format("2006-01-02")
 
 	return filepath.Join(baseDir, year, monthName, dayStr, mediaType+"s")

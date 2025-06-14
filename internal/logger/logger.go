@@ -115,7 +115,7 @@ func (l *Logger) Info(message string) {
 
 func (l *Logger) Security(message string) {
 	formatted := fmt.Sprintf("[%s] %s",
-		l.colors.red.Add(color.Bold).Sprint("🔒 SÉCURITÉ"),
+		l.colors.red.Add(color.Bold).Sprint("🔒 SECURITY"),
 		message)
 	fmt.Println(formatted)
 
@@ -130,19 +130,19 @@ func (l *Logger) ShowHeader(keepOriginals bool) {
 
 	header := `
 ╔══════════════════════════════════════════════════════════════╗
-║        ` + l.colors.bold.Sprint("Media Converter SÉCURISÉ v1.0") + `               ║
+║        ` + l.colors.bold.Sprint("Media Converter SECURE v1.0") + `               ║
 ╚══════════════════════════════════════════════════════════════╝
 `
 	l.colors.purple.Print(header)
 	fmt.Println()
 
 	if !keepOriginals {
-		l.colors.red.Add(color.Bold).Println("⚠️  ATTENTION: Mode suppression activé !")
-		l.colors.red.Println("Les fichiers originaux seront supprimés après conversion")
-		l.colors.yellow.Println("Pour garder les originaux: --keep-originals")
+		l.colors.red.Add(color.Bold).Println("⚠️  WARNING: Deletion mode activated!")
+		l.colors.red.Println("Original files will be deleted after conversion")
+		l.colors.yellow.Println("To keep originals: --keep-originals")
 		fmt.Println()
 	} else {
-		l.colors.green.Println("🔒 Mode sécurisé: Les originaux seront conservés")
+		l.colors.green.Println("🔒 Secure mode: Originals will be preserved")
 		fmt.Println()
 	}
 }

@@ -217,7 +217,7 @@ chmod +x media-converter
 | `--video-codec` | h265 | Video codec (h265, h264, av1) |
 | `--video-crf` | 28 | Video CRF quality (lower = better) |
 | `--organize-by-date` | true | Organize files by date |
-| `--language` | fr | Language for month names (en, fr, es, de) |
+| `--language` | en | Language for month names (en, fr, es, de) |
 | `--timeout-photo` | 300 | Photo conversion timeout (seconds) |
 | `--timeout-video` | 1800 | Video conversion timeout (seconds) |
 
@@ -302,7 +302,7 @@ photo_quality_webp: 85
 video_codec: "h265"
 video_crf: 28
 organize_by_date: true
-language: "fr"
+language: "en"
 timeout_photo: 300
 timeout_video: 1800
 ```
@@ -402,7 +402,7 @@ With `--organize-by-date=true`:
 ```
 destination/
 ├── 2024/
-│   ├── 01-Janvier/
+│   ├── 01-January/
 │   │   ├── 2024-01-15/
 │   │   │   ├── images/
 │   │   │   │   └── 2024-01-15_vacation_001.avif
