@@ -1,0 +1,589 @@
+#!/bin/bash
+
+# Script de conversion parallèle avec sécurités renforcées
+# Usage: ./convert_media_secure.sh /chemin/source /chemin/destination
+
+set -euo pipefail
+
+# Configuration
+SOURCE_DIR="${1:-}"
+DEST_DIR="${2:-}"
+THREADS=$(sysctl -n hw.ncpu)
+MAX_JOBS=$((THREADS - 3))
+
+# Formats supportés
+PHOTO_FORMATS="jpg jpeg heic heif cr2 arw nef dng tiff tif png raw bmp gif webp"
+VIDEO_FORMATS="mov mp4 avi mkv m4v mts m2ts mpg mpeg wmv flv 3gp 3gpp"
+
+# Qualité par défaut
+PHOTO_QUALITY_AVIF=80
+PHOTO_QUALITY_WEBP=85
+VIDEO_CRF=28
+
+# TIMEOUTS DE SÉCURITÉ
+CONVERSION_TIMEOUT_PHOTO=300  # 5 minutes max par photo
+CONVERSION_TIMEOUT_VIDEO=1800 # 30 minutes max par vidéo
+
+# Couleurs
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+# Compteurs
+TOTAL_FILES=0
+PROCESSED_FILES=0
+FAILED_FILES=0
+SKIPPED_FILES=0
+
+# SÉCURITÉS CRITIQUES
+SAFETY_CHECKS_ENABLED=1
+MIN_OUTPUT_SIZE_RATIO=0.005  # Le fichier de sortie doit faire au moins 0.5% de l'original
+DRY_RUN="${DRY_RUN:-0}"     # Mode test par défaut
+
+# Fonction pour obtenir la date de création/modification d'un fichier
+get_file_date() {
+    local file="$1"
+    local date_created=$(mdls -name kMDItemContentCreationDate -raw "$file" 2>/dev/null || echo "")
+    
+    if [[ "$date_created" != "(null)" && "$date_created" != "" ]]; then
+        date -j -f "%Y-%m-%d %H:%M:%S %z" "$date_created" "+%Y-%m-%d" 2>/dev/null || \
+        date -r "$file" "+%Y-%m-%d"
+    else
+        date -r "$file" "+%Y-%m-%d"
+    fi
+}
+
+# Fonction pour nettoyer les noms de fichiers
+clean_filename() {
+    local filename="$1"
+    local extension="$2"
+    local date="$3"
+    local counter="$4"
+    
+    local clean_name=$(echo "$filename" | \
+        sed 's/[^a-zA-Z0-9._-]/_/g' | \
+        sed 's/__*/_/g' | \
+        sed 's/^_//;s/_$//')
+    
+    echo "${date}_${clean_name}_$(printf "%03d" $counter).${extension}"
+}
+
+# Logs sécurisés
+log() {
+    echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $1" | tee -a "$DEST_DIR/conversion.log"
+}
+
+error() {
+    echo -e "${RED}[ERROR $(date '+%H:%M:%S')]${NC} $1" | tee -a "$DEST_DIR/conversion.log" >&2
+    ((FAILED_FILES++))
+}
+
+success() {
+    echo -e "${GREEN}[✓]${NC} $1" | tee -a "$DEST_DIR/conversion.log"
+}
+
+warn() {
+    echo -e "${YELLOW}[⚠ ]${NC} $1" | tee -a "$DEST_DIR/conversion.log"
+}
+
+info() {
+    echo -e "${CYAN}[i]${NC} $1"
+}
+
+security_check() {
+    echo -e "${RED}${BOLD}[🔒 SÉCURITÉ]${NC} $1" | tee -a "$DEST_DIR/conversion.log"
+}
+
+# Vérification de l'espace disque
+check_disk_space() {
+    local source_size=$(du -sb "$SOURCE_DIR" | cut -f1)
+    local dest_available=$(df "$DEST_DIR" | tail -1 | awk '{print $4}')
+    local dest_available_bytes=$((dest_available * 1024))
+    
+    # Estime l'espace nécessaire (50% de l'original pour être sûr)
+    local estimated_needed=$((source_size / 2))
+    
+    if [[ $dest_available_bytes -lt $estimated_needed ]]; then
+        error "Espace disque insuffisant !"
+        error "Disponible: $(numfmt --to=iec $dest_available_bytes)"
+        error "Estimé nécessaire: $(numfmt --to=iec $estimated_needed)"
+        exit 1
+    fi
+    
+    success "Espace disque suffisant"
+}
+
+# VÉRIFICATION CRITIQUE : Le fichier de sortie est-il valide ?
+verify_output_file() {
+    local input="$1"
+    local output="$2"
+    local type="$3"  # "photo" ou "video"
+    
+    # Le fichier existe-t-il ?
+    if [[ ! -f "$output" ]]; then
+        security_check "ÉCHEC: Fichier de sortie inexistant: $output"
+        return 1
+    fi
+    
+    # Le fichier est-il non vide ?
+    local output_size=$(stat -f%z "$output" 2>/dev/null || echo "0")
+    if [[ $output_size -eq 0 ]]; then
+        security_check "ÉCHEC: Fichier de sortie vide: $output"
+        rm -f "$output"  # Nettoie le fichier corrompu
+        return 1
+    fi
+    
+    # Le fichier fait-il une taille minimum raisonnable ?
+    local input_size=$(stat -f%z "$input")
+    local min_size=$(echo "$input_size * $MIN_OUTPUT_SIZE_RATIO" | bc -l | cut -d. -f1)
+    
+    if [[ $output_size -lt $min_size ]]; then
+        security_check "ÉCHEC: Fichier de sortie trop petit ($output_size < $min_size bytes): $output"
+        rm -f "$output"  # Nettoie le fichier potentiellement corrompu
+        return 1
+    fi
+    
+    # Test d'intégrité selon le type
+    if [[ "$type" == "photo" ]]; then
+        if ! magick identify "$output" >/dev/null 2>&1; then
+            security_check "ÉCHEC: Image corrompue: $output"
+            rm -f "$output"
+            return 1
+        fi
+    elif [[ "$type" == "video" ]]; then
+        if ! ffprobe "$output" >/dev/null 2>&1; then
+            security_check "ÉCHEC: Vidéo corrompue: $output"
+            rm -f "$output"
+            return 1
+        fi
+    fi
+    
+    success "Fichier de sortie vérifié: $(basename "$output") ($(numfmt --to=iec $output_size))"
+    return 0
+}
+
+# Header avec avertissement sécurité
+show_header() {
+    clear
+    echo -e "${PURPLE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}        ${BOLD}Convertisseur Média SÉCURISÉ v3.0${NC}               ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    if [[ "${KEEP_ORIGINALS:-1}" != "1" ]]; then
+        echo -e "${RED}${BOLD}⚠️  ATTENTION: Mode suppression activé !${NC}"
+        echo -e "${RED}Les fichiers originaux seront supprimés après conversion${NC}"
+        echo -e "${YELLOW}Pour garder les originaux: KEEP_ORIGINALS=1${NC}"
+        echo ""
+    else
+        echo -e "${GREEN}🔒 Mode sécurisé: Les originaux seront conservés${NC}"
+        echo ""
+    fi
+}
+
+# Fonction de conversion d'image SÉCURISÉE
+convert_image() {
+    local input="$1"
+    local output_dir="$2"
+    local format="${PHOTO_FORMAT:-avif}"
+    
+    local filename=$(basename "$input")
+    local name="${filename%.*}"
+    local file_date=$(get_file_date "$input")
+    
+    # Détermine le dossier de destination
+    local dest_path="$output_dir/images"
+    if [[ "${ORGANIZE_BY_DATE:-1}" == "1" ]]; then
+        local year=$(echo "$file_date" | cut -d'-' -f1)
+        local month=$(echo "$file_date" | cut -d'-' -f2)
+        case $month in
+            01) month_name="01-Janvier" ;;
+            02) month_name="02-Fevrier" ;;
+            03) month_name="03-Mars" ;;
+            04) month_name="04-Avril" ;;
+            05) month_name="05-Mai" ;;
+            06) month_name="06-Juin" ;;
+            07) month_name="07-Juillet" ;;
+            08) month_name="08-Aout" ;;
+            09) month_name="09-Septembre" ;;
+            10) month_name="10-Octobre" ;;
+            11) month_name="11-Novembre" ;;
+            12) month_name="12-Decembre" ;;
+        esac
+        dest_path="$output_dir/$year/$month_name/$file_date/images"
+    fi
+    
+    mkdir -p "$dest_path"
+    
+    # Génère un nom de fichier unique
+    local counter=1
+    local clean_name
+    local output
+    
+    while true; do
+        clean_name=$(clean_filename "$name" "$format" "$file_date" "$counter")
+        output="$dest_path/$clean_name"
+        
+        if [[ ! -f "$output" ]]; then
+            break
+        fi
+        ((counter++))
+    done
+    
+    # Mode dry-run
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        info "[DRY-RUN] Convertirait: $filename → $clean_name"
+        return 0
+    fi
+    
+    # Conversion avec timeout de sécurité
+    local conversion_success=0
+    
+    if timeout $CONVERSION_TIMEOUT_PHOTO magick "$input" \
+        -auto-orient \
+        -strip \
+        -quality "${PHOTO_QUALITY_AVIF}" \
+        -define heic:preserve-orientation=true \
+        "$output" 2>/dev/null; then
+        
+        # VÉRIFICATION CRITIQUE du fichier de sortie
+        if verify_output_file "$input" "$output" "photo"; then
+            conversion_success=1
+            
+            local original_size=$(stat -f%z "$input")
+            local new_size=$(stat -f%z "$output")
+            local reduction=$(( (original_size - new_size) * 100 / original_size ))
+            
+            ((PROCESSED_FILES++))
+            
+            # SUPPRESSION SÉCURISÉE (seulement si explicitement demandé)
+            if [[ "${KEEP_ORIGINALS:-1}" != "1" && $conversion_success -eq 1 ]]; then
+                # Triple vérification avant suppression
+                if [[ -f "$output" && -s "$output" && $(stat -f%z "$output") -gt 1000 ]]; then
+                    security_check "Suppression sécurisée de: $filename"
+                    rm "$input"
+                else
+                    warn "Suppression annulée pour sécurité: $filename"
+                fi
+            fi
+            
+            echo "$(date '+%Y-%m-%d %H:%M:%S') | Photo OK | $filename → $clean_name | -${reduction}%" >> "$output_dir/conversion.log"
+        else
+            error "Échec vérification: $filename"
+            return 1
+        fi
+    else
+        error "Timeout/Échec conversion photo: $filename"
+        rm -f "$output"  # Nettoie le fichier potentiellement corrompu
+        return 1
+    fi
+}
+
+# Fonction de conversion vidéo SÉCURISÉE
+convert_video() {
+    local input="$1"
+    local output_dir="$2"
+    local codec="${VIDEO_CODEC:-h265}"
+    
+    local filename=$(basename "$input")
+    local name="${filename%.*}"
+    local file_date=$(get_file_date "$input")
+    
+    # Détermine le dossier de destination
+    local dest_path="$output_dir/videos"
+    if [[ "${ORGANIZE_BY_DATE:-1}" == "1" ]]; then
+        local year=$(echo "$file_date" | cut -d'-' -f1)
+        local month=$(echo "$file_date" | cut -d'-' -f2)
+        case $month in
+            01) month_name="01-Janvier" ;;
+            02) month_name="02-Fevrier" ;;
+            03) month_name="03-Mars" ;;
+            04) month_name="04-Avril" ;;
+            05) month_name="05-Mai" ;;
+            06) month_name="06-Juin" ;;
+            07) month_name="07-Juillet" ;;
+            08) month_name="08-Aout" ;;
+            09) month_name="09-Septembre" ;;
+            10) month_name="10-Octobre" ;;
+            11) month_name="11-Novembre" ;;
+            12) month_name="12-Decembre" ;;
+        esac
+        dest_path="$output_dir/$year/$month_name/$file_date/videos"
+    fi
+    
+    mkdir -p "$dest_path"
+    
+    # Génère un nom de fichier unique
+    local counter=1
+    local clean_name
+    local output
+    
+    while true; do
+        clean_name=$(clean_filename "$name" "mp4" "$file_date" "$counter")
+        output="$dest_path/$clean_name"
+        
+        if [[ ! -f "$output" ]]; then
+            break
+        fi
+        ((counter++))
+    done
+    
+    # Mode dry-run
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        info "[DRY-RUN] Convertirait: $filename → $clean_name"
+        return 0
+    fi
+    
+    local video_codec
+    case "$codec" in
+        h265) video_codec="libx265" ;;
+        av1) video_codec="libaom-av1" ;;
+        *) video_codec="libx264" ;;
+    esac
+    
+    # Conversion avec timeout de sécurité
+    local conversion_success=0
+    
+    if timeout $CONVERSION_TIMEOUT_VIDEO ffmpeg -i "$input" \
+        -c:v "$video_codec" \
+        -crf $VIDEO_CRF \
+        -preset medium \
+        -c:a aac -b:a 128k \
+        -movflags +faststart \
+        -map_metadata 0 \
+        "$output" -y 2>/dev/null; then
+        
+        # VÉRIFICATION CRITIQUE du fichier de sortie
+        if verify_output_file "$input" "$output" "video"; then
+            conversion_success=1
+            
+            local original_size=$(stat -f%z "$input")
+            local new_size=$(stat -f%z "$output")
+            local reduction=$(( (original_size - new_size) * 100 / original_size ))
+            
+            ((PROCESSED_FILES++))
+            
+            # SUPPRESSION SÉCURISÉE (seulement si explicitement demandé)
+            if [[ "${KEEP_ORIGINALS:-1}" != "1" && $conversion_success -eq 1 ]]; then
+                # Triple vérification avant suppression
+                if [[ -f "$output" && -s "$output" && $(stat -f%z "$output") -gt 10000 ]]; then
+                    security_check "Suppression sécurisée de: $filename"
+                    rm "$input"
+                else
+                    warn "Suppression annulée pour sécurité: $filename"
+                fi
+            fi
+            
+            echo "$(date '+%Y-%m-%d %H:%M:%S') | Vidéo OK | $filename → $clean_name | -${reduction}%" >> "$output_dir/conversion.log"
+        else
+            error "Échec vérification: $filename"
+            return 1
+        fi
+    else
+        error "Timeout/Échec conversion vidéo: $filename"
+        rm -f "$output"  # Nettoie le fichier potentiellement corrompu
+        return 1
+    fi
+}
+
+# Vérification des dépendances
+check_dependencies() {
+    local missing=()
+    
+    info "Vérification des dépendances..."
+    
+    command -v ffmpeg >/dev/null || missing+=("ffmpeg")
+    command -v magick >/dev/null || missing+=("imagemagick")
+    command -v parallel >/dev/null || missing+=("parallel")
+    command -v bc >/dev/null || missing+=("bc")
+    command -v timeout >/dev/null || missing+=("coreutils")
+    
+    if [ ${#missing[@]} -ne 0 ]; then
+        error "Dépendances manquantes: ${missing[*]}"
+        echo "Installation sur macOS: brew install ${missing[*]}"
+        exit 1
+    fi
+    
+    success "Toutes les dépendances sont installées"
+}
+
+# Test de conversion sur un échantillon
+run_safety_test() {
+    info "Exécution du test de sécurité..."
+    
+    # Trouve un fichier test
+    local test_file=$(find -L "$SOURCE_DIR" -type f \( -iname "*.jpg" -o -iname "*.JPG" \) | head -1)
+    
+    if [[ -z "$test_file" ]]; then
+        warn "Aucun fichier test trouvé, test de sécurité ignoré"
+        return 0
+    fi
+    
+    local test_dir="$DEST_DIR/.safety_test"
+    mkdir -p "$test_dir"
+    
+    # Copie le fichier pour le test
+    local test_copy="$test_dir/test_$(basename "$test_file")"
+    cp "$test_file" "$test_copy"
+    
+    info "Test de conversion sur: $(basename "$test_file")"
+    
+    # Test de conversion
+    local original_keep_setting="${KEEP_ORIGINALS:-1}"
+    export KEEP_ORIGINALS=1  # Force la conservation pour le test
+    
+    if convert_image "$test_copy" "$test_dir"; then
+        success "Test de sécurité réussi ✅"
+        rm -rf "$test_dir"
+        export KEEP_ORIGINALS="$original_keep_setting"
+        return 0
+    else
+        error "Test de sécurité échoué ❌"
+        rm -rf "$test_dir"
+        exit 1
+    fi
+}
+
+# Export des fonctions pour GNU parallel
+export -f convert_image convert_video get_file_date clean_filename verify_output_file
+export -f log error success warn info security_check
+export SOURCE_DIR DEST_DIR PHOTO_QUALITY_AVIF PHOTO_QUALITY_WEBP VIDEO_CRF
+export PHOTO_FORMAT VIDEO_CODEC KEEP_ORIGINALS ORGANIZE_BY_DATE DRY_RUN
+export TOTAL_FILES PROCESSED_FILES FAILED_FILES SKIPPED_FILES
+export CONVERSION_TIMEOUT_PHOTO CONVERSION_TIMEOUT_VIDEO MIN_OUTPUT_SIZE_RATIO
+export RED GREEN YELLOW BLUE PURPLE CYAN NC BOLD
+
+usage() {
+    show_header
+    echo -e "${BOLD}Usage:${NC} $0 <source_directory> <destination_directory>"
+    echo ""
+    echo -e "${BOLD}Options d'environnement SÉCURISÉES:${NC}"
+    echo -e "  ${GREEN}KEEP_ORIGINALS=1${NC}        (défaut: garde les originaux)"
+    echo -e "  ${YELLOW}KEEP_ORIGINALS=0${NC}        (⚠️  supprime après conversion)"
+    echo -e "  ${CYAN}DRY_RUN=1${NC}               (mode test sans conversion)"
+    echo "  PHOTO_FORMAT=avif|webp     (défaut: avif)"
+    echo "  VIDEO_CODEC=h265|av1       (défaut: h265)"
+    echo "  ORGANIZE_BY_DATE=1         (organisation par date)"
+    echo ""
+    echo -e "${BOLD}Sécurités intégrées:${NC}"
+    echo "  🔒 Vérification d'intégrité des fichiers"
+    echo "  ⏱️  Timeouts de conversion"
+    echo "  💾 Vérification de l'espace disque"
+    echo "  🧪 Test préliminaire"
+    echo "  📝 Logs détaillés"
+    echo ""
+    echo -e "${BOLD}Exemples:${NC}"
+    echo -e "  ${CYAN}# Mode test (recommandé)${NC}"
+    echo "  DRY_RUN=1 $0 ~/Photos ~/Photos_Test"
+    echo ""
+    echo -e "  ${CYAN}# Conversion en gardant les originaux${NC}"
+    echo "  KEEP_ORIGINALS=1 $0 ~/Photos ~/Photos_Converted"
+    exit 1
+}
+
+# Fonction principale sécurisée
+main() {
+    if [[ -z "$SOURCE_DIR" || -z "$DEST_DIR" ]]; then
+        usage
+    fi
+    
+    if [[ ! -d "$SOURCE_DIR" ]]; then
+        error "Répertoire source inexistant: $SOURCE_DIR"
+        exit 1
+    fi
+    
+    show_header
+    check_dependencies
+    
+    # Création du répertoire de destination
+    mkdir -p "$DEST_DIR"
+    
+    # Vérification de l'espace disque
+    check_disk_space
+    
+    # Initialisation du log
+    echo "=== Conversion sécurisée démarrée le $(date) ===" > "$DEST_DIR/conversion.log"
+    echo "Source: $SOURCE_DIR" >> "$DEST_DIR/conversion.log"
+    echo "Destination: $DEST_DIR" >> "$DEST_DIR/conversion.log"
+    echo "KEEP_ORIGINALS: ${KEEP_ORIGINALS:-1}" >> "$DEST_DIR/conversion.log"
+    echo "DRY_RUN: ${DRY_RUN:-0}" >> "$DEST_DIR/conversion.log"
+    
+    echo ""
+    log "Configuration sécurisée"
+    info "Source: $SOURCE_DIR"
+    info "Destination: $DEST_DIR"
+    info "Mode: ${DRY_RUN:+Test sans conversion}"
+    info "Conservation originaux: ${KEEP_ORIGINALS:-OUI}"
+    echo ""
+    
+    # Test de sécurité préliminaire
+    if [[ "${DRY_RUN:-0}" != "1" ]]; then
+        run_safety_test
+    fi
+    
+    # Recherche des fichiers
+    log "Analyse des fichiers..."
+    
+    local photo_files=$(mktemp)
+    local video_files=$(mktemp)
+    
+    for ext in $PHOTO_FORMATS; do
+        local ext_upper=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
+        find -L "$SOURCE_DIR" -type f \( -iname "*.${ext}" -o -iname "*.${ext_upper}" \) 2>/dev/null >> "$photo_files"
+    done
+    
+    for ext in $VIDEO_FORMATS; do
+        local ext_upper=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
+        find -L "$SOURCE_DIR" -type f \( -iname "*.${ext}" -o -iname "*.${ext_upper}" \) 2>/dev/null >> "$video_files"
+    done
+    
+    local photo_count=$(wc -l < "$photo_files" | xargs)
+    local video_count=$(wc -l < "$video_files" | xargs)
+    
+    TOTAL_FILES=$((photo_count + video_count))
+    
+    info "📸 Photos trouvées: $photo_count"
+    info "🎬 Vidéos trouvées: $video_count"
+    info "📁 Total: $TOTAL_FILES fichiers"
+    echo ""
+    
+    # Conversion avec maximum de sécurité
+    if [[ $photo_count -gt 0 ]]; then
+        log "Conversion sécurisée des photos..."
+        cat "$photo_files" | parallel -j $MAX_JOBS --timeout $((CONVERSION_TIMEOUT_PHOTO + 60)) convert_image {} "$DEST_DIR" || true
+    fi
+    
+    if [[ $video_count -gt 0 ]]; then
+        echo ""
+        log "Conversion sécurisée des vidéos..."
+        cat "$video_files" | parallel -j $MAX_JOBS --timeout $((CONVERSION_TIMEOUT_VIDEO + 60)) convert_video {} "$DEST_DIR" || true
+    fi
+    
+    rm -f "$photo_files" "$video_files"
+    
+    # Rapport final
+    echo ""
+    echo -e "${PURPLE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║${NC}                 ${BOLD}Conversion sécurisée terminée${NC}              ${PURPLE}║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    success "✅ Fichiers traités: $PROCESSED_FILES/$TOTAL_FILES"
+    
+    if [[ $FAILED_FILES -gt 0 ]]; then
+        warn "⚠️  Échecs: $FAILED_FILES (voir les logs)"
+    fi
+    
+    echo ""
+    info "📁 Fichiers convertis dans: $DEST_DIR"
+    info "📄 Logs détaillés: $DEST_DIR/conversion.log"
+    
+    if [[ "${KEEP_ORIGINALS:-1}" == "1" ]]; then
+        success "🔒 Vos fichiers originaux ont été conservés"
+    fi
+}
+
+main "$@"
