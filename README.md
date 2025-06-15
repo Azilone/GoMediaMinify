@@ -3,7 +3,7 @@
   
   # GoMediaMinify
   
-  **Convert your photos and videos to modern formats while saving tons of space. Safe, fast, and easy to use.**
+  **Preserve your memories efficiently with modern codecs like AVIF and H.265. Great visual quality, minimal storage space.**
 </div>
 
 ## Quick Start (Non-Technical Users)
@@ -27,10 +27,10 @@
 ### 🚀 Use It
 ```bash
 # Test first (see what happens without changing anything)
-./gomediaminify --dry-run /path/to/your/photos /path/to/converted
+./media-converter --dry-run /path/to/your/photos /path/to/converted
 
 # Convert safely (keeps your originals)
-./gomediaminify /path/to/your/photos /path/to/converted
+./media-converter /path/to/your/photos /path/to/converted
 ```
 
 ## Real Example: Before & After
@@ -45,34 +45,52 @@ Here's what happens when you convert a typical SD card from a camera:
 ![SD Card After](https://github.com/Azilone/GoMediaMinify/blob/main/docs/images/after-conversion.png)
 *Same content converted - only 10GB used, organized by date*
 
-**Result**: 72% space saved, photos organized by actual date taken, originals preserved safely.
+**Result**: 90% space saved, photos organized by actual date taken, originals preserved safely.
 
-## What It Does
+## Purpose: Efficient Memory Backup
 
-✅ **Converts photos**: JPG/HEIC/RAW → AVIF/WebP (60-80% smaller)  
-✅ **Converts videos**: MOV/MP4 → H.265/AV1 (40-60% smaller)  
+This tool is designed for **preserving personal memories** (family photos, vacation videos, etc.) using modern, efficient codecs while maintaining excellent visual quality. It's **not intended for professional RAW file storage** or archival workflows.
+
+### What It Does
+
+✅ **Converts everyday photos**: JPG/HEIC → AVIF/WebP (90% smaller, visually identical)  
+✅ **Compresses videos smartly**: MOV/MP4 → H.265/AV1 (60% smaller, great quality)  
+✅ **Perfect for memories**: Family photos, vacation videos, phone camera content  
 ✅ **Keeps originals safe**: Never overwrites your files  
 ✅ **Organizes by date**: Uses photo metadata to sort by actual date taken  
-✅ **Resume anywhere**: Stop and continue later without losing progress  
+✅ **Resume anywhere**: Stop and continue later without losing progress
 
-## Common Use Cases
+### Ideal Use Cases ✅
+- Family photo collections from phones/cameras
+- Vacation and travel videos
+- Social media content backup
+- Freeing up phone/computer storage
+- Creating shareable memory archives
 
-**Family Photos**
+### Not Recommended For ❌
+- Professional RAW file workflows
+- Files requiring pixel-perfect accuracy
+- Commercial photography archives
+- Content requiring original formats  
+
+## Memory Backup Examples
+
+**Family Photo Collection**
 ```bash
-./gomediaminify ~/Pictures/Family ~/Pictures/Family_Converted
-# Result: 20GB → 6GB, organized by date, originals safe
+./media-converter ~/Pictures/Family ~/Pictures/Family_Memories
+# Result: 20GB → 6GB of precious memories, perfectly organized
 ```
 
 **Vacation Videos**
 ```bash
-./gomediaminify --video-codec=h265 ~/Videos/Vacation ~/Videos/Vacation_Converted
-# Result: 4K videos 50% smaller, same quality
+./media-converter --video-codec=h265 ~/Videos/Vacation ~/Videos/Vacation_Memories  
+# Result: 4K vacation videos 50% smaller, same beautiful quality
 ```
 
-**Camera SD Card**
+**Phone Camera Backup**
 ```bash
-./gomediaminify /Volumes/SD_CARD ~/Desktop/Converted_Photos
-# Result: Clean organization by date, massive space savings
+./media-converter /Volumes/iPhone_Photos ~/Desktop/Phone_Memories
+# Result: Years of photos organized by date, huge space savings
 ```
 
 ## Supported Formats
@@ -186,11 +204,11 @@ brew install ffmpeg imagemagick
 
 ## What to Expect
 
-### Space Savings
-- **iPhone photos**: 75% smaller
-- **RAW files**: 85% smaller  
-- **4K videos**: 50% smaller
-- **Typical family library**: 70% reduction
+### Space Savings for Personal Content
+- **Phone photos (JPG/HEIC)**: 75% smaller with AVIF
+- **Family videos**: 50% smaller with H.265
+- **Vacation footage**: 60% smaller, same visual quality
+- **Typical memory collection**: 70% reduction
 
 ### Performance
 - **10,000 photos**: 2-4 hours
@@ -232,4 +250,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-*Built for safety and reliability. Your original files are never at risk.*
+*Built for preserving your precious memories efficiently. Modern codecs, great quality, minimal space.*
