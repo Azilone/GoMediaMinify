@@ -6,6 +6,8 @@
   **Preserve your memories efficiently with modern codecs like AVIF and H.265. Great visual quality, minimal storage space.**
 </div>
 
+> ⚠️ GoMediaMinify uses modern **lossy** codecs (AVIF, H.265) to shrink your photos and videos. This means the output isn't pixel-for-pixel identical to RAW or original files, but it's visually very close while dramatically reducing size—perfect for cloud backups like Google Photos.
+
 ## Quick Start (Non-Technical Users)
 
 **Just want to use it right away?** Download the ready-to-use program:
@@ -49,11 +51,11 @@ Here's what happens when you convert a typical SD card from a camera:
 
 ## Purpose: Efficient Memory Backup
 
-This tool is designed for **preserving personal memories** (family photos, vacation videos, etc.) using modern, efficient codecs while maintaining excellent visual quality. It's **not intended for professional RAW file storage** or archival workflows.
+This tool is designed for **preserving personal memories** (family photos, vacation videos, etc.) using modern, efficient **lossy** codecs. It intentionally trades a little quality for huge space savings, making it ideal for cloud backups with providers like Google Photos. It's **not intended for professional RAW file storage** or pixel-perfect archival workflows.
 
 ### What It Does
 
-✅ **Converts everyday photos**: JPG/HEIC → AVIF/WebP (90% smaller, visually identical)  
+✅ **Converts everyday photos**: JPG/HEIC → AVIF/WebP (up to 90% smaller, visually very close)
 ✅ **Compresses videos smartly**: MOV/MP4 → H.265/AV1 (60% smaller, great quality)  
 ✅ **Perfect for memories**: Family photos, vacation videos, phone camera content  
 ✅ **Keeps originals safe**: Never overwrites your files  
@@ -64,6 +66,7 @@ This tool is designed for **preserving personal memories** (family photos, vacat
 - Family photo collections from phones/cameras
 - Vacation and travel videos
 - Social media content backup
+- Preparing collections for cloud providers like Google Photos
 - Freeing up phone/computer storage
 - Creating shareable memory archives
 
