@@ -20,9 +20,11 @@
    - **Linux ARM**: `media-converter-linux-arm64` (Raspberry Pi, etc.)
 
 ### 🔧 Install Dependencies
-**macOS**: `brew install ffmpeg imagemagick`  
-**Windows**: Download [FFmpeg](https://ffmpeg.org/download.html) + [ImageMagick](https://imagemagick.org/script/download.php#windows)  
-**Linux**: `sudo apt install ffmpeg imagemagick`
+Install FFmpeg (which also ships `ffprobe`) and ImageMagick:
+
+- **macOS**: `brew install ffmpeg imagemagick`  
+- **Windows**: Download [FFmpeg](https://ffmpeg.org/download.html) + [ImageMagick](https://imagemagick.org/script/download.php#windows)  
+- **Linux**: `sudo apt install ffmpeg imagemagick`
 
 ### 🚀 Use It
 ```bash
@@ -192,11 +194,15 @@ Real-time progress with time estimates:
 ```bash
 # Check if installed
 ffmpeg -version
+ffprobe -version
 magick -version
 
 # Install on macOS
 brew install ffmpeg imagemagick
 ```
+
+**Conversions are slow on Apple Silicon**:
+The converter now auto-detects a native arm64 `ffmpeg` build. Install Homebrew's Apple Silicon package (`brew install ffmpeg`) so it can pick `/opt/homebrew/bin/ffmpeg`. If you keep an older Rosetta build in `/usr/local/bin`, remove or reorder it so the native binary is preferred.
 
 **Not enough space**: The tool needs about 50% of your source folder size for temporary files during conversion.
 

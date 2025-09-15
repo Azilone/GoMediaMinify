@@ -36,7 +36,7 @@ func (c *Converter) convertImage(inputPath string) error {
 	}
 
 	// Determine destination path
-	destPath := utils.CreateDestinationPath(c.config.DestDir, fileDate, "image", c.config.OrganizeByDate)
+	destPath := utils.CreateDestinationPath(c.config.DestDir, fileDate, "image", c.config.OrganizeByDate, c.config.Language)
 	if err := utils.EnsureDir(destPath); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}

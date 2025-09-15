@@ -1,15 +1,12 @@
 package converter
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/semaphore"
 
 	"github.com/kevindurb/media-converter/internal/config"
 	"github.com/kevindurb/media-converter/internal/logger"
@@ -18,10 +15,14 @@ import (
 )
 
 type Converter struct {
-	config   *config.Config
-	logger   *logger.Logger
-	security *security.SecurityChecker
-	stats    *ConversionStats
+	config        *config.Config
+	logger        *logger.Logger
+	security      *security.SecurityChecker
+	stats         *ConversionStats
+	ffmpegCommand []string
+	ffmpegMessage string
+	accelOnce     sync.Once
+	accelInfo     VideoAccelerationInfo
 }
 
 type ConversionStats struct {
@@ -42,6 +43,8 @@ type ConversionStats struct {
 }
 
 func NewConverter(cfg *config.Config, log *logger.Logger) *Converter {
+	ffmpegCmd, ffmpegMsg := utils.ResolveFFmpegCommand()
+
 	return &Converter{
 		config:   cfg,
 		logger:   log,
@@ -49,6 +52,8 @@ func NewConverter(cfg *config.Config, log *logger.Logger) *Converter {
 		stats: &ConversionStats{
 			startTime: time.Now(),
 		},
+		ffmpegCommand: ffmpegCmd,
+		ffmpegMessage: ffmpegMsg,
 	}
 }
 
@@ -56,6 +61,9 @@ func (c *Converter) Convert() error {
 	c.logger.Log("Starting secure media conversion")
 	c.logger.Info(fmt.Sprintf("Source: %s", c.config.SourceDir))
 	c.logger.Info(fmt.Sprintf("Destination: %s", c.config.DestDir))
+	if c.ffmpegMessage != "" {
+		c.logger.Info(c.ffmpegMessage)
+	}
 
 	if c.config.DryRun {
 		c.logger.Info("DRY RUN MODE - No files will be converted")
@@ -144,39 +152,56 @@ func (c *Converter) findFiles() ([]string, []string, error) {
 }
 
 func (c *Converter) convertFiles(files []string, fileType string) error {
-	ctx := context.Background()
-	sem := semaphore.NewWeighted(int64(c.config.MaxJobs))
+	if len(files) == 0 {
+		return nil
+	}
 
+	maxJobs := c.config.MaxJobs
+	if maxJobs < 1 {
+		maxJobs = 1
+	}
+
+	if fileType == "video" {
+		if maxJobs > 2 {
+			maxJobs = 2
+		}
+		c.logger.Info(fmt.Sprintf("📹 Video conversion limited to %d simultaneous jobs for CPU protection", maxJobs))
+	}
+
+	jobs := make(chan string)
 	var wg sync.WaitGroup
 
-	for _, file := range files {
-		wg.Add(1)
-
-		go func(filePath string) {
-			defer wg.Done()
-
-			if err := sem.Acquire(ctx, 1); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to acquire semaphore: %v", err))
-				return
-			}
-			defer sem.Release(1)
-
+	worker := func() {
+		defer wg.Done()
+		for filePath := range jobs {
 			if err := c.convertFile(filePath, fileType); err != nil {
 				c.logger.Error(fmt.Sprintf("Failed to convert %s: %v", filepath.Base(filePath), err))
 				c.stats.mu.Lock()
 				c.stats.failedFiles++
 				c.stats.mu.Unlock()
-			} else {
-				c.stats.mu.Lock()
-				c.stats.processedFiles++
-				c.stats.mu.Unlock()
-				// Show overall progress every 10 files
-				if c.stats.processedFiles%10 == 0 {
-					c.showOverallProgress()
-				}
+				continue
 			}
-		}(file)
+
+			c.stats.mu.Lock()
+			c.stats.processedFiles++
+			processed := c.stats.processedFiles
+			c.stats.mu.Unlock()
+
+			if processed%10 == 0 {
+				c.showOverallProgress()
+			}
+		}
 	}
+
+	for i := 0; i < maxJobs; i++ {
+		wg.Add(1)
+		go worker()
+	}
+
+	for _, file := range files {
+		jobs <- file
+	}
+	close(jobs)
 
 	wg.Wait()
 	return nil

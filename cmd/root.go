@@ -95,6 +95,7 @@ func init() {
 	// Video conversion flags
 	rootCmd.Flags().String("video-codec", "h265", "Video codec (h265, h264, av1)")
 	rootCmd.Flags().Int("video-crf", 28, "Video CRF value (lower = better quality)")
+	rootCmd.Flags().Bool("video-acceleration", true, "Enable hardware acceleration for video conversion")
 
 	// Organization flags
 	rootCmd.Flags().BoolP("organize-by-date", "o", true, "Organize files by date")
@@ -114,6 +115,7 @@ func init() {
 	viper.BindPFlag("photo_quality_webp", rootCmd.Flags().Lookup("photo-quality-webp"))
 	viper.BindPFlag("video_codec", rootCmd.Flags().Lookup("video-codec"))
 	viper.BindPFlag("video_crf", rootCmd.Flags().Lookup("video-crf"))
+	viper.BindPFlag("video_acceleration", rootCmd.Flags().Lookup("video-acceleration"))
 	viper.BindPFlag("organize_by_date", rootCmd.Flags().Lookup("organize-by-date"))
 	viper.BindPFlag("language", rootCmd.Flags().Lookup("language"))
 	viper.BindPFlag("timeout_photo", rootCmd.Flags().Lookup("timeout-photo"))

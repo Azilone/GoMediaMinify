@@ -193,6 +193,7 @@ func CleanFilename(filename, extension string, date time.Time, counter int) stri
 }
 
 func GetMonthName(month int, language string) string {
+	language = strings.ToLower(language)
 	monthNames := map[string][]string{
 		"fr": {"Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin",
 			"Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre"},
@@ -216,13 +217,13 @@ func GetMonthName(month int, language string) string {
 	return fmt.Sprintf("%02d-%s", month, names[month-1])
 }
 
-func CreateDestinationPath(baseDir string, fileDate time.Time, mediaType string, organizeByDate bool) string {
+func CreateDestinationPath(baseDir string, fileDate time.Time, mediaType string, organizeByDate bool, language string) string {
 	if !organizeByDate {
 		return filepath.Join(baseDir, mediaType+"s")
 	}
 
 	year := strconv.Itoa(fileDate.Year())
-	monthName := GetMonthName(int(fileDate.Month()), "en") // Default to English
+	monthName := GetMonthName(int(fileDate.Month()), language)
 	dayStr := fileDate.Format("2006-01-02")
 
 	return filepath.Join(baseDir, year, monthName, dayStr, mediaType+"s")
@@ -255,8 +256,34 @@ func GetUniqueFilename(basePath, filename, extension string) (string, error) {
 	}
 }
 
+func GetVideoDuration(filePath string) (time.Duration, error) {
+	cmd := exec.Command("ffprobe",
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		filePath,
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe duration query failed: %w", err)
+	}
+
+	durationStr := strings.TrimSpace(string(output))
+	if durationStr == "" || strings.EqualFold(durationStr, "N/A") {
+		return 0, fmt.Errorf("video duration unavailable")
+	}
+
+	seconds, err := strconv.ParseFloat(durationStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration value %q: %w", durationStr, err)
+	}
+
+	return time.Duration(seconds * float64(time.Second)), nil
+}
+
 func CheckDependencies() error {
-	dependencies := []string{"ffmpeg", "magick"}
+	dependencies := []string{"ffmpeg", "ffprobe", "magick"}
 
 	var missing []string
 	for _, dep := range dependencies {

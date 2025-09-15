@@ -253,15 +253,8 @@ func (s *SecurityChecker) isMarkerAbandoned(markerPath string) bool {
 				return true
 			}
 
-			// Check if process is still running
-			process, err := os.FindProcess(pid)
-			if err != nil {
+			if !processExists(pid) {
 				return true
-			}
-
-			// Try to signal the process (0 signal doesn't actually send a signal)
-			if err := process.Signal(os.Signal(nil)); err != nil {
-				return true // Process doesn't exist
 			}
 
 			return false // Process is still running

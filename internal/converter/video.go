@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,140 @@ import (
 
 	"github.com/kevindurb/media-converter/internal/utils"
 )
+
+// VideoAccelerationInfo stocke les informations sur l'accélération disponible
+type VideoAccelerationInfo struct {
+	Available   bool
+	Message     string
+	Codec       string
+	Preset      string
+	HwAccelArgs []string
+	OutputTag   string
+}
+
+type videoEncodingProfile struct {
+	Codec         string
+	Args          []string
+	HwAccelArgs   []string
+	OutputTag     string
+	UsingHardware bool
+	LogMessage    string
+}
+
+func (c *Converter) buildVideoEncodingProfile(inputPath string) (videoEncodingProfile, error) {
+	targetCodec := normalizeVideoCodec(c.config.VideoCodec)
+	accelerationInfo := c.getVideoAccelerationInfo()
+
+	switch targetCodec {
+	case "h264":
+		crf := clampInt(c.config.VideoCRF, 18, 30)
+		return videoEncodingProfile{
+			Codec:      "libx264",
+			Args:       []string{"-crf", strconv.Itoa(crf), "-preset", "medium"},
+			LogMessage: fmt.Sprintf("📹 Using software encoding: libx264 (CRF %d, preset medium)", crf),
+		}, nil
+	case "av1":
+		crf := clampInt(c.config.VideoCRF, 28, 45)
+		return videoEncodingProfile{
+			Codec:      "libaom-av1",
+			Args:       []string{"-crf", strconv.Itoa(crf), "-b:v", "0", "-cpu-used", "4"},
+			LogMessage: fmt.Sprintf("📹 Using software encoding: libaom-av1 (CRF %d)", crf),
+		}, nil
+	default:
+		if accelerationInfo.Available && c.config.VideoAcceleration {
+			duration, err := utils.GetVideoDuration(inputPath)
+			if err != nil {
+				c.logger.Warn(fmt.Sprintf("Unable to read video duration for bitrate estimation: %v", err))
+			}
+
+			bitrate, bufsize := c.estimateHardwareBitrate(inputPath, duration)
+
+			args := []string{"-b:v", bitrate, "-maxrate", bitrate}
+			if bufsize != "" {
+				args = append(args, "-bufsize", bufsize)
+			}
+
+			message := accelerationInfo.Message
+			if message == "" {
+				message = "VideoToolbox HEVC"
+			}
+
+			return videoEncodingProfile{
+				Codec:         accelerationInfo.Codec,
+				Args:          args,
+				HwAccelArgs:   accelerationInfo.HwAccelArgs,
+				OutputTag:     accelerationInfo.OutputTag,
+				UsingHardware: true,
+				LogMessage:    fmt.Sprintf("📹 Using hardware acceleration: %s (target bitrate %s)", message, bitrate),
+			}, nil
+		}
+
+		crf := clampInt(c.config.VideoCRF, 18, 32)
+		preset := accelerationInfo.Preset
+		if preset == "" {
+			preset = "medium"
+		}
+
+		message := accelerationInfo.Message
+		if message == "" {
+			message = "libx265"
+		}
+
+		return videoEncodingProfile{
+			Codec:      "libx265",
+			Args:       []string{"-crf", strconv.Itoa(crf), "-preset", preset},
+			LogMessage: fmt.Sprintf("📹 Using software encoding: %s (CRF %d, preset %s)", message, crf, preset),
+		}, nil
+	}
+}
+
+func normalizeVideoCodec(value string) string {
+	codec := strings.ToLower(strings.TrimSpace(value))
+	switch codec {
+	case "h265", "hevc", "h.265":
+		return "h265"
+	case "h264", "avc", "h.264":
+		return "h264"
+	case "av1":
+		return "av1"
+	default:
+		return "h265"
+	}
+}
+
+func clampInt(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
+}
+
+func (c *Converter) estimateHardwareBitrate(inputPath string, duration time.Duration) (string, string) {
+	const fallback = 4.0
+	info, err := os.Stat(inputPath)
+	if err != nil || duration <= 0 {
+		return fmt.Sprintf("%.2fM", fallback), fmt.Sprintf("%.2fM", fallback*2)
+	}
+
+	seconds := duration.Seconds()
+	if seconds <= 0 {
+		return fmt.Sprintf("%.2fM", fallback), fmt.Sprintf("%.2fM", fallback*2)
+	}
+
+	bitsPerSecond := (float64(info.Size()) * 8) / seconds
+	mbps := bitsPerSecond / 1_000_000
+	if mbps <= 0 {
+		return fmt.Sprintf("%.2fM", fallback), fmt.Sprintf("%.2fM", fallback*2)
+	}
+
+	targetMbps := math.Max(2.5, mbps*0.65)
+	bufferMbps := math.Max(targetMbps*2, targetMbps+1)
+
+	return fmt.Sprintf("%.2fM", targetMbps), fmt.Sprintf("%.2fM", bufferMbps)
+}
 
 func (c *Converter) convertVideo(inputPath string) error {
 	filename := filepath.Base(inputPath)
@@ -27,7 +162,7 @@ func (c *Converter) convertVideo(inputPath string) error {
 	}
 
 	// Determine destination path
-	destPath := utils.CreateDestinationPath(c.config.DestDir, fileDate, "video", c.config.OrganizeByDate)
+	destPath := utils.CreateDestinationPath(c.config.DestDir, fileDate, "video", c.config.OrganizeByDate, c.config.Language)
 	if err := utils.EnsureDir(destPath); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
@@ -79,31 +214,46 @@ func (c *Converter) convertVideo(inputPath string) error {
 		}
 	}()
 
-	// Determine video codec
-	var videoCodec string
-	switch c.config.VideoCodec {
-	case "h265":
-		videoCodec = "libx265"
-	case "av1":
-		videoCodec = "libaom-av1"
-	default:
-		videoCodec = "libx264"
+	profile, err := c.buildVideoEncodingProfile(inputPath)
+	if err != nil {
+		return err
+	}
+
+	if profile.LogMessage != "" {
+		c.logger.Info(profile.LogMessage)
 	}
 
 	// Convert to temporary file with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), c.config.ConversionTimeoutVideo)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", inputPath,
-		"-c:v", videoCodec,
-		"-crf", fmt.Sprintf("%d", c.config.VideoCRF),
-		"-preset", "medium",
+	// Build ffmpeg command based on acceleration
+	var ffmpegArgs []string
+	if len(profile.HwAccelArgs) > 0 {
+		ffmpegArgs = append(ffmpegArgs, profile.HwAccelArgs...)
+	}
+
+	ffmpegArgs = append(ffmpegArgs,
+		"-i", inputPath,
+		"-c:v", profile.Codec,
+	)
+
+	ffmpegArgs = append(ffmpegArgs, profile.Args...)
+
+	if profile.OutputTag != "" {
+		ffmpegArgs = append(ffmpegArgs, "-tag:v", profile.OutputTag)
+	}
+
+	ffmpegArgs = append(ffmpegArgs,
 		"-c:a", "aac", "-b:a", "128k",
 		"-movflags", "+faststart",
 		"-map_metadata", "0",
-		"-f", "mp4", // Force MP4 format
-		"-progress", "pipe:2", // Enable progress reporting
-		"-y", tempPath) // Convert to temporary file
+		"-f", "mp4",
+		"-progress", "pipe:2",
+		"-y", tempPath,
+	)
+
+	cmd := c.newFFmpegCommand(ctx, ffmpegArgs...)
 
 	// Start the command and monitor progress
 	if err := c.runVideoConversionWithProgress(cmd, inputPath, filename); err != nil {
@@ -149,6 +299,21 @@ func (c *Converter) convertVideo(inputPath string) error {
 	}
 
 	return nil
+}
+
+func (c *Converter) newFFmpegCommand(ctx context.Context, args ...string) *exec.Cmd {
+	command := "ffmpeg"
+	if len(c.ffmpegCommand) > 0 {
+		command = c.ffmpegCommand[0]
+	}
+
+	cmdArgs := []string{}
+	if len(c.ffmpegCommand) > 1 {
+		cmdArgs = append(cmdArgs, c.ffmpegCommand[1:]...)
+	}
+	cmdArgs = append(cmdArgs, args...)
+
+	return exec.CommandContext(ctx, command, cmdArgs...)
 }
 
 func (c *Converter) runVideoConversionWithProgress(cmd *exec.Cmd, inputPath, filename string) error {
@@ -312,6 +477,40 @@ func (c *Converter) showVideoCompletion(progress *VideoProgress) {
 
 	c.logger.Success(fmt.Sprintf("✅ %s completed in %s",
 		filepath.Base(progress.filename), c.formatDuration(duration)))
+}
+
+// getVideoAccelerationInfo détermine quelle accélération utiliser
+func (c *Converter) getVideoAccelerationInfo() VideoAccelerationInfo {
+	c.accelOnce.Do(func() {
+		info := VideoAccelerationInfo{
+			Available: false,
+			Message:   "Hardware acceleration not available",
+			Codec:     "libx265",
+			Preset:    "medium",
+		}
+
+		if !c.config.VideoAcceleration {
+			info.Message = "Acceleration disabled in config"
+			c.accelInfo = info
+			return
+		}
+
+		available, message := utils.CheckVideoAcceleration(c.ffmpegCommand)
+		if available {
+			info.Available = true
+			info.Message = message
+			info.Codec = "hevc_videotoolbox"
+			info.Preset = ""
+			info.HwAccelArgs = []string{"-hwaccel", "videotoolbox"}
+			info.OutputTag = "hvc1"
+		} else if message != "" {
+			info.Message = message + " - using software encoding"
+		}
+
+		c.accelInfo = info
+	})
+
+	return c.accelInfo
 }
 
 func (c *Converter) calculateS3Cost(fileSizeMB float64, progressPercent float64) string {
