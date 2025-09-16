@@ -204,26 +204,10 @@ magick -version
 brew install ffmpeg imagemagick
 ```
 
-**Conversions are slow on Apple Silicon**:
-The converter now auto-detects a native arm64 `ffmpeg` build. Install Homebrew's Apple Silicon package (`brew install ffmpeg`) so it can pick `/opt/homebrew/bin/ffmpeg`. If you keep an older Rosetta build in `/usr/local/bin`, remove or reorder it so the native binary is preferred.
-
 **Not enough space**: The tool needs about 50% of your source folder size for temporary files during conversion.
 
 **Large files timing out**: Increase timeout with `--timeout-video=3600`
 
-## What to Expect
-
-### Space Savings for Personal Content
-- **Phone photos (JPG/HEIC)**: 75% smaller with AVIF
-- **Family videos**: 50% smaller with H.265
-- **Vacation footage**: 60% smaller, same visual quality
-- **Typical memory collection**: 70% reduction
-
-### Performance
-- **10,000 photos**: 2-4 hours
-- **100GB videos**: 4-8 hours
-- **Memory usage**: Under 2GB
-- **Processing**: 50-200 files/minute
 
 ## Development
 
