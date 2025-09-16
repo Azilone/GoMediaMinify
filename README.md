@@ -6,6 +6,8 @@
   **Preserve your memories efficiently with modern codecs like AVIF and H.265. Great visual quality, minimal storage space.**
 </div>
 
+GoMediaMinify is an open-source command-line utility for shrinking everyday photo and video libraries with modern codecs like AVIF, WebP, H.265, and AV1. It keeps your originals untouched, organizes new files by capture date, and resumes large conversions automatically so home archives stay tidy without manual effort.
+
 > ⚠️ GoMediaMinify uses modern **lossy** codecs (AVIF, H.265) to shrink your photos and videos. This means the output isn't pixel-for-pixel identical to RAW or original files, but it's visually very close while dramatically reducing size—perfect for cloud backups like Google Photos.
 
 ## Quick Start (Non-Technical Users)
@@ -58,19 +60,15 @@ This tool is designed for **preserving personal memories** (family photos, vacat
 ### What It Does
 
 ✅ **Converts everyday photos**: JPG/HEIC → AVIF/WebP (up to 90% smaller, visually very close)
-✅ **Compresses videos smartly**: MOV/MP4 → H.265/AV1 (60% smaller, great quality)  
-✅ **Perfect for memories**: Family photos, vacation videos, phone camera content  
-✅ **Keeps originals safe**: Never overwrites your files  
-✅ **Organizes by date**: Uses photo metadata to sort by actual date taken  
+✅ **Compresses videos smartly**: MOV/MP4 → H.265/AV1 (60% smaller, great quality)
+✅ **Organizes by date**: Uses photo metadata to sort by actual date taken
+✅ **Keeps originals safe**: Never overwrites your files
 ✅ **Resume anywhere**: Stop and continue later without losing progress
 
 ### Ideal Use Cases ✅
-- Family photo collections from phones/cameras
-- Vacation and travel videos
-- Social media content backup
-- Preparing collections for cloud providers like Google Photos
-- Freeing up phone/computer storage
-- Creating shareable memory archives
+- Household photo libraries that mix phone shots and camera images and need dependable backups.
+- Trip or event footage where large 4K/HD videos benefit from smaller H.265/AV1 versions.
+- Preparing libraries for cloud or NAS syncing when storage quotas are tight.
 
 ### Not Recommended For ❌
 - Professional RAW file workflows
