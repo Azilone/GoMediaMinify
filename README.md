@@ -146,7 +146,24 @@ photo_quality_avif: 80
 video_codec: "h265"
 organize_by_date: true
 language: "en"
+adaptive_workers:
+  enabled: true
+  min: 1
+  max: 6
+  cpu_high: 80
+  cpu_low: 50
+  mem_low_percent: 20
+  interval_seconds: 3
 ```
+
+### Adaptive Worker Mode
+
+Use `--adaptive-workers` (or the `adaptive_workers` config block) when you want the converter to automatically scale the number of simultaneous video conversions based on current system load. The monitor checks CPU load averages and free memory every few seconds and nudges the worker limit between the configured `min` and `max` bounds:
+
+- Reduce workers when CPU stays above `cpu_high` or free memory drops below `mem_low_percent`.
+- Increase workers after two calm readings (CPU under `cpu_low`, memory comfortably above the threshold).
+
+This keeps long video batches responsive on laptops without micro-managing job counts. Omit the block entirely to keep the traditional fixed limit.
 
 ## Output Structure
 

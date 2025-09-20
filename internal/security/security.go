@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kevindurb/media-converter/internal/utils"
 )
 
 type SecurityChecker struct {
@@ -144,13 +146,26 @@ func (s *SecurityChecker) SafeDelete(filePath, outputPath string) error {
 
 func getDirSize(path string) (int64, error) {
 	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if utils.IsPermissionError(walkErr) {
+				return nil
+			}
+			return walkErr
 		}
-		if !info.IsDir() {
-			size += info.Size()
+
+		if info.IsDir() {
+			if utils.ShouldSkipSystemEntry(info.Name(), true) {
+				return filepath.SkipDir
+			}
+			return nil
 		}
+
+		if utils.ShouldSkipSystemEntry(info.Name(), false) {
+			return nil
+		}
+
+		size += info.Size()
 		return nil
 	})
 	return size, err

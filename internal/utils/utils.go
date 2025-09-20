@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -215,6 +217,67 @@ func GetMonthName(month int, language string) string {
 	}
 
 	return fmt.Sprintf("%02d-%s", month, names[month-1])
+}
+
+var systemDirectories = map[string]struct{}{
+	".spotlight-v100":           {},
+	".fseventsd":                {},
+	".temporaryitems":           {},
+	".documentrevisions-v100":   {},
+	"system volume information": {},
+}
+
+var systemFiles = map[string]struct{}{
+	".ds_store":   {},
+	"thumbs.db":   {},
+	"desktop.ini": {},
+}
+
+func ShouldSkipSystemEntry(name string, isDir bool) bool {
+	lower := strings.ToLower(name)
+
+	if strings.HasPrefix(lower, ".trash") {
+		return true
+	}
+
+	if isDir {
+		if _, ok := systemDirectories[lower]; ok {
+			return true
+		}
+		if strings.HasPrefix(lower, "__macosx") {
+			return true
+		}
+	}
+
+	if _, ok := systemFiles[lower]; ok {
+		return true
+	}
+
+	if strings.HasPrefix(name, "._") {
+		return true
+	}
+
+	return false
+}
+
+func IsPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if os.IsPermission(err) {
+		return true
+	}
+
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		if os.IsPermission(pathErr.Err) {
+			return true
+		}
+		return errors.Is(pathErr.Err, syscall.EPERM) || errors.Is(pathErr.Err, syscall.EACCES)
+	}
+
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES)
 }
 
 func CreateDestinationPath(baseDir string, fileDate time.Time, mediaType string, organizeByDate bool, language string) string {

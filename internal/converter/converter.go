@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,12 +131,22 @@ func (c *Converter) Convert() error {
 func (c *Converter) findFiles() ([]string, []string, error) {
 	var photoFiles, videoFiles []string
 
-	err := filepath.Walk(c.config.SourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err := filepath.Walk(c.config.SourceDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if utils.IsPermissionError(walkErr) {
+				return nil
+			}
+			return walkErr
 		}
 
 		if info.IsDir() {
+			if utils.ShouldSkipSystemEntry(info.Name(), true) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if utils.ShouldSkipSystemEntry(info.Name(), false) {
 			return nil
 		}
 
@@ -161,11 +172,41 @@ func (c *Converter) convertFiles(files []string, fileType string) error {
 		maxJobs = 1
 	}
 
+	var (
+		limiter      *AdaptiveLimiter
+		cancelAdjust context.CancelFunc
+	)
+
 	if fileType == "video" {
-		if maxJobs > 2 {
-			maxJobs = 2
+		if c.config.AdaptiveWorkers.Enabled {
+			maxJobs = c.config.AdaptiveWorkers.MaxWorkers
+			if maxJobs < c.config.AdaptiveWorkers.MinWorkers {
+				maxJobs = c.config.AdaptiveWorkers.MinWorkers
+			}
+			if maxJobs < 1 {
+				maxJobs = 1
+			}
+
+			initialLimit := c.config.AdaptiveWorkers.MinWorkers
+			if initialLimit < 1 {
+				initialLimit = 1
+			}
+			if initialLimit > maxJobs {
+				initialLimit = maxJobs
+			}
+
+			limiter = NewAdaptiveLimiter(initialLimit)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancelAdjust = cancel
+			monitor := NewResourceMonitor(c.config.AdaptiveWorkers.CheckInterval, c.logger)
+			snapshots := monitor.Start(ctx)
+			go runAdaptiveController(ctx, limiter, c.config.AdaptiveWorkers, snapshots, c.logger)
+		} else {
+			if maxJobs > 2 {
+				maxJobs = 2
+			}
+			c.logger.Info(fmt.Sprintf("📹 Video conversion limited to %d simultaneous jobs for CPU protection", maxJobs))
 		}
-		c.logger.Info(fmt.Sprintf("📹 Video conversion limited to %d simultaneous jobs for CPU protection", maxJobs))
 	}
 
 	jobs := make(chan string)
@@ -174,12 +215,23 @@ func (c *Converter) convertFiles(files []string, fileType string) error {
 	worker := func() {
 		defer wg.Done()
 		for filePath := range jobs {
+			if limiter != nil {
+				limiter.Acquire()
+			}
+
 			if err := c.convertFile(filePath, fileType); err != nil {
+				if limiter != nil {
+					limiter.Release()
+				}
 				c.logger.Error(fmt.Sprintf("Failed to convert %s: %v", filepath.Base(filePath), err))
 				c.stats.mu.Lock()
 				c.stats.failedFiles++
 				c.stats.mu.Unlock()
 				continue
+			}
+
+			if limiter != nil {
+				limiter.Release()
 			}
 
 			c.stats.mu.Lock()
@@ -204,6 +256,10 @@ func (c *Converter) convertFiles(files []string, fileType string) error {
 	close(jobs)
 
 	wg.Wait()
+
+	if cancelAdjust != nil {
+		cancelAdjust()
+	}
 	return nil
 }
 
@@ -214,9 +270,23 @@ func (c *Converter) runSafetyTest() error {
 	var testFile string
 	var preferredFile string
 
-	err := filepath.Walk(c.config.SourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return err
+	err := filepath.Walk(c.config.SourceDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if utils.IsPermissionError(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+
+		if info.IsDir() {
+			if utils.ShouldSkipSystemEntry(info.Name(), true) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if utils.ShouldSkipSystemEntry(info.Name(), false) {
+			return nil
 		}
 
 		if utils.HasExtension(path, c.config.PhotoFormats) {

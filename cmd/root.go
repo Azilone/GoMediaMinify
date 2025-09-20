@@ -97,6 +97,15 @@ func init() {
 	rootCmd.Flags().Int("video-crf", 28, "Video CRF value (lower = better quality)")
 	rootCmd.Flags().Bool("video-acceleration", true, "Enable hardware acceleration for video conversion")
 
+	// Adaptive worker flags
+	rootCmd.Flags().Bool("adaptive-workers", false, "Enable adaptive worker management for video conversions")
+	rootCmd.Flags().Int("adaptive-workers-min", 1, "Minimum concurrent video conversions when adaptive mode is enabled")
+	rootCmd.Flags().Int("adaptive-workers-max", 6, "Maximum concurrent video conversions when adaptive mode is enabled")
+	rootCmd.Flags().Float64("adaptive-workers-cpu-high", 80.0, "CPU utilisation threshold to reduce workers in adaptive mode")
+	rootCmd.Flags().Float64("adaptive-workers-cpu-low", 50.0, "CPU utilisation threshold to increase workers in adaptive mode")
+	rootCmd.Flags().Float64("adaptive-workers-mem-low", 20.0, "Minimum available memory percentage before reducing workers")
+	rootCmd.Flags().Int("adaptive-workers-interval", 3, "Seconds between adaptive worker checks")
+
 	// Organization flags
 	rootCmd.Flags().BoolP("organize-by-date", "o", true, "Organize files by date")
 	rootCmd.Flags().String("language", "en", "Language for month names (en, fr, es, de)")
@@ -121,6 +130,13 @@ func init() {
 	viper.BindPFlag("timeout_photo", rootCmd.Flags().Lookup("timeout-photo"))
 	viper.BindPFlag("timeout_video", rootCmd.Flags().Lookup("timeout-video"))
 	viper.BindPFlag("min_output_size_ratio", rootCmd.Flags().Lookup("min-output-ratio"))
+	viper.BindPFlag("adaptive_workers.enabled", rootCmd.Flags().Lookup("adaptive-workers"))
+	viper.BindPFlag("adaptive_workers.min", rootCmd.Flags().Lookup("adaptive-workers-min"))
+	viper.BindPFlag("adaptive_workers.max", rootCmd.Flags().Lookup("adaptive-workers-max"))
+	viper.BindPFlag("adaptive_workers.cpu_high", rootCmd.Flags().Lookup("adaptive-workers-cpu-high"))
+	viper.BindPFlag("adaptive_workers.cpu_low", rootCmd.Flags().Lookup("adaptive-workers-cpu-low"))
+	viper.BindPFlag("adaptive_workers.mem_low_percent", rootCmd.Flags().Lookup("adaptive-workers-mem-low"))
+	viper.BindPFlag("adaptive_workers.interval_seconds", rootCmd.Flags().Lookup("adaptive-workers-interval"))
 }
 
 func initConfig() {
