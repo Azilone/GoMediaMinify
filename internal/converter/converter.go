@@ -152,9 +152,17 @@ func (c *Converter) findFiles() ([]string, []string, error) {
 		}
 
 		if info.IsDir() {
+			if utils.IsPathWithin(path, c.config.DestDir) {
+				return filepath.SkipDir
+			}
+
 			if utils.ShouldSkipSystemEntry(info.Name(), true) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		if utils.IsPathWithin(path, c.config.DestDir) {
 			return nil
 		}
 

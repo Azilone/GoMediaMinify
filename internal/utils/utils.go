@@ -362,6 +362,25 @@ func CheckDependencies() error {
 	return nil
 }
 
+func IsPathWithin(path, parent string) bool {
+	if parent == "" {
+		return false
+	}
+
+	absPath, err1 := filepath.Abs(path)
+	absParent, err2 := filepath.Abs(parent)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	rel, err := filepath.Rel(absParent, absPath)
+	if err != nil {
+		return false
+	}
+
+	return rel == "." || !strings.HasPrefix(rel, "..")
+}
+
 func HasExtension(filename string, extensions []string) bool {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(filename), "."))
 	for _, validExt := range extensions {

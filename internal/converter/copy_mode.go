@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,6 +78,16 @@ func (c *Converter) runCopyMode() error {
 		startTime: time.Now(),
 	}
 	c.tracker = checksum.NewTracker()
+
+	if c.config.VerifyChecksum {
+		indexed, err := c.loadExistingChecksums()
+		if err != nil {
+			return fmt.Errorf("failed to index destination: %w", err)
+		}
+		if indexed > 0 {
+			c.logger.Info(fmt.Sprintf("Indexed %d existing files for duplicate detection", indexed))
+		}
+	}
 
 	if err := c.security.CheckDiskSpace(c.config.SourceDir, c.config.DestDir); err != nil {
 		return fmt.Errorf("disk space check failed: %w", err)
@@ -204,8 +215,9 @@ func (c *Converter) copyFile(srcPath string) (copyResult, error) {
 			c.tracker.Register(srcChecksum, destPath)
 			result.action = copyActionDuplicate
 			result.duplicateOf = destPath
-			c.logger.Info(fmt.Sprintf("⏭️  Skipped duplicate: %s (checksum: %s)",
+			c.logger.Info(fmt.Sprintf("⏭️  Skipped duplicate: %s (matches existing %s, checksum: %s)",
 				filepath.Base(srcPath),
+				filepath.Base(destPath),
 				checksum.FormatChecksum(srcChecksum)))
 			return result, nil
 		}
@@ -290,6 +302,60 @@ func detectMediaType(path string, photoFormats []string) string {
 		return "image"
 	}
 	return "video"
+}
+
+func (c *Converter) loadExistingChecksums() (int, error) {
+	if _, err := os.Stat(c.config.DestDir); os.IsNotExist(err) {
+		return 0, nil
+	} else if err != nil {
+		return 0, fmt.Errorf("stat destination: %w", err)
+	}
+
+	var indexed int
+	err := filepath.Walk(c.config.DestDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			if utils.IsPermissionError(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+
+		if info.IsDir() {
+			if utils.ShouldSkipSystemEntry(info.Name(), true) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if utils.ShouldSkipSystemEntry(info.Name(), false) {
+			return nil
+		}
+
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		lowerName := strings.ToLower(info.Name())
+		if strings.HasSuffix(lowerName, ".tmp") || strings.HasSuffix(lowerName, ".processing") {
+			return nil
+		}
+
+		if !(utils.HasExtension(path, c.config.PhotoFormats) || utils.HasExtension(path, c.config.VideoFormats)) {
+			return nil
+		}
+
+		sum, err := c.hasher.Calculate(path)
+		if err != nil {
+			c.logger.Warn(fmt.Sprintf("Failed to index existing file %s: %v", filepath.Base(path), err))
+			return nil
+		}
+
+		c.tracker.Register(sum, path)
+		indexed++
+		return nil
+	})
+
+	return indexed, err
 }
 
 func (c *Converter) showCopySummary(stats *copyStats) {
