@@ -224,6 +224,33 @@ brew install ffmpeg imagemagick
 **Large files timing out**: Increase timeout with `--timeout-video=3600`
 
 
+## Testing
+
+GoMediaMinify includes a comprehensive test suite to ensure reliability and quality.
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Run specific test package
+go test -v ./internal/converter/
+go test -v ./internal/utils/
+```
+
+### Continuous Integration
+
+Tests run automatically on every push and pull request via **GitHub Actions**. The CI pipeline tests on:
+- Ubuntu (Linux)
+- macOS
+- Multiple Go versions (1.21, 1.22)
+
+For detailed testing documentation, see [TESTING.md](TESTING.md).
+
 ## Development
 
 ### Build
