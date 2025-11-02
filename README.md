@@ -37,6 +37,9 @@ Install FFmpeg (which also ships `ffprobe`) and ImageMagick:
 
 # Convert safely (keeps your originals)
 ./media-converter /path/to/your/photos /path/to/converted
+
+# Archive to NAS without conversion (checksum + duplicate checks)
+./media-converter --copy-only /Volumes/SD-Card /Volumes/NAS/Photos-Master
 ```
 
 ## Real Example: Before & After
@@ -96,6 +99,26 @@ This tool is designed for **preserving personal memories** (family photos, vacat
 # Result: Years of photos organized by date, huge space savings
 ```
 
+## Copy-Only Archive Mode
+
+Need a safe backup before touching your originals? Add `--copy-only` to mirror an SD card or external drive onto a NAS:
+
+```bash
+# 1. Archive cards with integrity checks
+./media-converter --copy-only /Volumes/SD-Card /Volumes/NAS/Photos-Master
+
+# 2. Optimise later from the archive
+./media-converter /Volumes/NAS/Photos-Master ~/Photos-Optimized
+```
+
+In copy-only mode the tool:
+
+- Calculates xxHash64 checksums for every file
+- Skips duplicates automatically (even during the same session)
+- Organises the archive by capture date
+- Uses temporary files + atomic renames for safe writes
+- Obeys `--dry-run` to rehearse the copy without touching the NAS
+
 ## Supported Formats
 
 **Input**: JPG, HEIC, HEIF, CR2, ARW, NEF, DNG, TIFF, PNG, RAW, BMP, GIF, WebP, MOV, MP4, AVI, MKV, M4V, MTS, M2TS, MPG, MPEG, WMV, FLV, 3GP
@@ -105,6 +128,7 @@ This tool is designed for **preserving personal memories** (family photos, vacat
 ## Safety Features
 
 - **Never lose files**: Originals are preserved by default
+- **Checksum guardrails**: Copy-only mode verifies xxHash64 checksums and skips duplicates
 - **Crash-proof**: Interrupt anytime, resume exactly where you left off  
 - **Test mode**: `--dry-run` shows what will happen without doing it
 - **Atomic operations**: Files are either perfect or untouched
@@ -130,6 +154,8 @@ go build -o media-converter
 |--------|---------|-------------|
 | `--dry-run` | false | Preview without converting |
 | `--keep-originals` | true | Preserve original files |
+| `--copy-only` | false | Copy-only archive mode with checksum verification |
+| `--verify-checksum` | false | Force checksum verification during conversion |
 | `--jobs` | CPU-1 | Number of parallel jobs |
 | `--photo-format` | avif | Photo output (avif, webp) |
 | `--video-codec` | h265 | Video codec (h265, h264, av1) |

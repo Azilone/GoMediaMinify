@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kevindurb/media-converter/internal/checksum"
 	"github.com/kevindurb/media-converter/internal/config"
 	"github.com/kevindurb/media-converter/internal/logger"
 	"github.com/kevindurb/media-converter/internal/security"
@@ -24,6 +25,8 @@ type Converter struct {
 	ffmpegMessage string
 	accelOnce     sync.Once
 	accelInfo     VideoAccelerationInfo
+	hasher        checksum.Hasher
+	tracker       *checksum.Tracker
 }
 
 type ConversionStats struct {
@@ -55,10 +58,19 @@ func NewConverter(cfg *config.Config, log *logger.Logger) *Converter {
 		},
 		ffmpegCommand: ffmpegCmd,
 		ffmpegMessage: ffmpegMsg,
+		hasher:        checksum.NewXXHash64Hasher(),
+		tracker:       checksum.NewTracker(),
 	}
 }
 
 func (c *Converter) Convert() error {
+	if c.config.CopyOnly {
+		return c.runCopyMode()
+	}
+	return c.runConversion()
+}
+
+func (c *Converter) runConversion() error {
 	c.logger.Log("Starting secure media conversion")
 	c.logger.Info(fmt.Sprintf("Source: %s", c.config.SourceDir))
 	c.logger.Info(fmt.Sprintf("Destination: %s", c.config.DestDir))
@@ -327,7 +339,7 @@ func (c *Converter) runSafetyTest() error {
 
 	// Copy test file
 	testCopy := filepath.Join(testDir, filepath.Base(testFile))
-	if err := c.copyFile(testFile, testCopy); err != nil {
+	if err := c.copySimple(testFile, testCopy); err != nil {
 		return err
 	}
 
@@ -417,7 +429,7 @@ func (c *Converter) formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh%dm", hours, minutes)
 }
 
-func (c *Converter) copyFile(src, dst string) error {
+func (c *Converter) copySimple(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err

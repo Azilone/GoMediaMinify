@@ -14,8 +14,10 @@ type Config struct {
 	DestDir   string
 
 	// Processing
-	MaxJobs int
-	DryRun  bool
+	MaxJobs        int
+	DryRun         bool
+	CopyOnly       bool
+	VerifyChecksum bool
 
 	// Image settings
 	PhotoFormat      string
@@ -61,6 +63,8 @@ func NewConfig() *Config {
 	// Set default values for viper
 	viper.SetDefault("max_jobs", runtime.NumCPU()-2)
 	viper.SetDefault("dry_run", false)
+	viper.SetDefault("copy_only", false)
+	viper.SetDefault("verify_checksum", false)
 	viper.SetDefault("photo_format", "avif")
 	viper.SetDefault("photo_quality_avif", 80)
 	viper.SetDefault("photo_quality_webp", 85)
@@ -86,6 +90,8 @@ func NewConfig() *Config {
 	cfg := &Config{
 		MaxJobs:                viper.GetInt("max_jobs"),
 		DryRun:                 viper.GetBool("dry_run"),
+		CopyOnly:               viper.GetBool("copy_only"),
+		VerifyChecksum:         viper.GetBool("verify_checksum"),
 		PhotoFormat:            viper.GetString("photo_format"),
 		PhotoQualityAVIF:       viper.GetInt("photo_quality_avif"),
 		PhotoQualityWebP:       viper.GetInt("photo_quality_webp"),
@@ -169,5 +175,17 @@ func NewConfig() *Config {
 		cfg.AdaptiveWorkers.MemLowPercent = 20.0
 	}
 
+	if cfg.CopyOnly {
+		cfg.VerifyChecksum = true
+	}
+
 	return cfg
+}
+
+// Validate ensures runtime constraints are satisfied and derives dependent values.
+func (c *Config) Validate() error {
+	if c.CopyOnly {
+		c.VerifyChecksum = true
+	}
+	return nil
 }

@@ -40,6 +40,33 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 			return fmt.Errorf("failed to create destination directory: %w", err)
 		}
 
+		if cfg.CopyOnly {
+			incompatible := []string{
+				"photo-format",
+				"photo-quality-avif",
+				"photo-quality-webp",
+				"video-codec",
+				"video-crf",
+				"video-acceleration",
+				"adaptive-workers",
+				"adaptive-workers-min",
+				"adaptive-workers-max",
+				"adaptive-workers-cpu-high",
+				"adaptive-workers-cpu-low",
+				"adaptive-workers-mem-low",
+				"adaptive-workers-interval",
+			}
+			for _, name := range incompatible {
+				if cmd.Flags().Changed(name) {
+					return fmt.Errorf("--%s cannot be used with --copy-only mode", name)
+				}
+			}
+		}
+
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
+
 		// Initialize logger
 		logPath := filepath.Join(cfg.DestDir, "conversion.log")
 		var err error
@@ -86,6 +113,8 @@ func init() {
 	rootCmd.Flags().BoolP("dry-run", "n", false, "Show what would be converted without actually converting")
 	rootCmd.Flags().BoolP("keep-originals", "k", true, "Keep original files after conversion")
 	rootCmd.Flags().IntP("jobs", "j", 0, "Number of parallel jobs (default: CPU cores - 1)")
+	rootCmd.Flags().Bool("copy-only", false, "Copy files without conversion (archive mode)")
+	rootCmd.Flags().Bool("verify-checksum", false, "Verify file integrity using checksums")
 
 	// Image conversion flags
 	rootCmd.Flags().String("photo-format", "avif", "Output format for photos (avif, webp)")
@@ -119,6 +148,8 @@ func init() {
 	viper.BindPFlag("dry_run", rootCmd.Flags().Lookup("dry-run"))
 	viper.BindPFlag("keep_originals", rootCmd.Flags().Lookup("keep-originals"))
 	viper.BindPFlag("max_jobs", rootCmd.Flags().Lookup("jobs"))
+	viper.BindPFlag("copy_only", rootCmd.Flags().Lookup("copy-only"))
+	viper.BindPFlag("verify_checksum", rootCmd.Flags().Lookup("verify-checksum"))
 	viper.BindPFlag("photo_format", rootCmd.Flags().Lookup("photo-format"))
 	viper.BindPFlag("photo_quality_avif", rootCmd.Flags().Lookup("photo-quality-avif"))
 	viper.BindPFlag("photo_quality_webp", rootCmd.Flags().Lookup("photo-quality-webp"))
