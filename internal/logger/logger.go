@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/kevindurb/media-converter/internal/api"
 	"github.com/sirupsen/logrus"
 )
 
 type Logger struct {
-	log    *logrus.Logger
-	colors struct {
+	log        *logrus.Logger
+	colors     struct {
 		red    *color.Color
 		green  *color.Color
 		yellow *color.Color
@@ -21,12 +22,24 @@ type Logger struct {
 		cyan   *color.Color
 		bold   *color.Color
 	}
-	logFile *os.File
+	logFile    *os.File
+	jsonWriter *api.JSONWriter
+	jsonMode   bool
 }
 
 func NewLogger(logPath string) (*Logger, error) {
+	return NewLoggerWithMode(logPath, false)
+}
+
+func NewLoggerWithMode(logPath string, jsonMode bool) (*Logger, error) {
 	l := &Logger{
-		log: logrus.New(),
+		log:      logrus.New(),
+		jsonMode: jsonMode,
+	}
+
+	// Initialize JSON writer if in JSON mode
+	if jsonMode {
+		l.jsonWriter = api.NewJSONWriter()
 	}
 
 	// Initialize colors
@@ -39,7 +52,7 @@ func NewLogger(logPath string) (*Logger, error) {
 	l.colors.bold = color.New(color.Bold)
 
 	// Create log file if path provided
-	if logPath != "" {
+	if logPath != "" && !jsonMode {
 		var err error
 		l.logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
@@ -48,12 +61,20 @@ func NewLogger(logPath string) (*Logger, error) {
 
 		// Set up multi-writer for both console and file
 		l.log.SetOutput(io.MultiWriter(os.Stdout, l.logFile))
+	} else if logPath != "" && jsonMode {
+		// In JSON mode, only write to log file (not stdout)
+		var err error
+		l.logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open log file: %w", err)
+		}
+		l.log.SetOutput(l.logFile)
 	}
 
 	l.log.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "15:04:05",
-		DisableColors:   false,
+		DisableColors:   jsonMode, // Disable colors in JSON mode
 	})
 
 	return l, nil
@@ -67,6 +88,11 @@ func (l *Logger) Close() error {
 }
 
 func (l *Logger) Log(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("info", message)
+		return
+	}
+
 	timestamp := time.Now().Format("15:04:05")
 	formatted := fmt.Sprintf("[%s] %s", l.colors.blue.Sprint(timestamp), message)
 	fmt.Println(formatted)
@@ -77,6 +103,11 @@ func (l *Logger) Log(message string) {
 }
 
 func (l *Logger) Error(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("error", message)
+		return
+	}
+
 	timestamp := time.Now().Format("15:04:05")
 	formatted := fmt.Sprintf("[ERROR %s] %s", l.colors.red.Sprint(timestamp), message)
 	fmt.Println(formatted)
@@ -87,6 +118,11 @@ func (l *Logger) Error(message string) {
 }
 
 func (l *Logger) Success(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("info", message)
+		return
+	}
+
 	formatted := fmt.Sprintf("[%s] %s", l.colors.green.Sprint("✓"), message)
 	fmt.Println(formatted)
 
@@ -96,6 +132,11 @@ func (l *Logger) Success(message string) {
 }
 
 func (l *Logger) Warn(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("warn", message)
+		return
+	}
+
 	formatted := fmt.Sprintf("[%s] %s", l.colors.yellow.Sprint("⚠"), message)
 	fmt.Println(formatted)
 
@@ -105,6 +146,11 @@ func (l *Logger) Warn(message string) {
 }
 
 func (l *Logger) Info(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("info", message)
+		return
+	}
+
 	formatted := fmt.Sprintf("[%s] %s", l.colors.cyan.Sprint("i"), message)
 	fmt.Println(formatted)
 
@@ -114,6 +160,11 @@ func (l *Logger) Info(message string) {
 }
 
 func (l *Logger) Security(message string) {
+	if l.jsonMode {
+		l.jsonWriter.EmitLog("warn", "SECURITY: "+message)
+		return
+	}
+
 	formatted := fmt.Sprintf("[%s] %s",
 		l.colors.red.Add(color.Bold).Sprint("🔒 SECURITY"),
 		message)
@@ -125,6 +176,11 @@ func (l *Logger) Security(message string) {
 }
 
 func (l *Logger) ShowHeader(keepOriginals bool) {
+	// Skip header in JSON mode
+	if l.jsonMode {
+		return
+	}
+
 	// Clear screen
 	fmt.Print("\033[H\033[2J")
 
@@ -145,4 +201,14 @@ func (l *Logger) ShowHeader(keepOriginals bool) {
 		l.colors.green.Println("🔒 Secure mode: Originals will be preserved")
 		fmt.Println()
 	}
+}
+
+// GetJSONWriter returns the JSON writer (if in JSON mode)
+func (l *Logger) GetJSONWriter() *api.JSONWriter {
+	return l.jsonWriter
+}
+
+// IsJSONMode returns true if logger is in JSON mode
+func (l *Logger) IsJSONMode() bool {
+	return l.jsonMode
 }

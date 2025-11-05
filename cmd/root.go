@@ -70,7 +70,7 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 		// Initialize logger
 		logPath := filepath.Join(cfg.DestDir, "conversion.log")
 		var err error
-		log, err = logger.NewLogger(logPath)
+		log, err = logger.NewLoggerWithMode(logPath, cfg.JSONMode)
 		if err != nil {
 			return fmt.Errorf("failed to initialize logger: %w", err)
 		}
@@ -115,6 +115,7 @@ func init() {
 	rootCmd.Flags().IntP("jobs", "j", 0, "Number of parallel jobs (default: CPU cores - 1)")
 	rootCmd.Flags().Bool("copy-only", false, "Copy files without conversion (archive mode)")
 	rootCmd.Flags().Bool("verify-checksum", false, "Verify file integrity using checksums")
+	rootCmd.Flags().Bool("json-mode", false, "Enable JSON output for Tauri integration (streaming events to stdout)")
 
 	// Image conversion flags
 	rootCmd.Flags().String("photo-format", "avif", "Output format for photos (avif, webp)")
@@ -150,6 +151,7 @@ func init() {
 	viper.BindPFlag("max_jobs", rootCmd.Flags().Lookup("jobs"))
 	viper.BindPFlag("copy_only", rootCmd.Flags().Lookup("copy-only"))
 	viper.BindPFlag("verify_checksum", rootCmd.Flags().Lookup("verify-checksum"))
+	viper.BindPFlag("json_mode", rootCmd.Flags().Lookup("json-mode"))
 	viper.BindPFlag("photo_format", rootCmd.Flags().Lookup("photo-format"))
 	viper.BindPFlag("photo_quality_avif", rootCmd.Flags().Lookup("photo-quality-avif"))
 	viper.BindPFlag("photo_quality_webp", rootCmd.Flags().Lookup("photo-quality-webp"))

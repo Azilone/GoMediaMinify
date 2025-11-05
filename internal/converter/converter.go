@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kevindurb/media-converter/internal/api"
 	"github.com/kevindurb/media-converter/internal/checksum"
 	"github.com/kevindurb/media-converter/internal/config"
 	"github.com/kevindurb/media-converter/internal/logger"
@@ -114,6 +115,20 @@ func (c *Converter) runConversion() error {
 	c.logger.Info(fmt.Sprintf("🎬 Videos found: %d", len(videoFiles)))
 	c.logger.Info(fmt.Sprintf("📁 Total files: %d", c.stats.totalFiles))
 	fmt.Println()
+
+	// Emit started event in JSON mode
+	if c.logger.IsJSONMode() {
+		jsonWriter := c.logger.GetJSONWriter()
+		jsonWriter.EmitStarted(api.NewStartedEvent(
+			c.config.SourceDir,
+			c.config.DestDir,
+			c.stats.totalFiles,
+			"conversion",
+			c.config.DryRun,
+			c.config.KeepOriginals,
+			c.config.OrganizeByDate,
+		))
+	}
 
 	// Calculate total file size
 	c.calculateTotalSize(append(photoFiles, videoFiles...))
@@ -516,6 +531,38 @@ func (c *Converter) showFinalReport() {
 
 	if c.config.KeepOriginals {
 		c.logger.Success("🔒 Original files have been preserved")
+	}
+
+	// Emit complete event in JSON mode
+	if c.logger.IsJSONMode() {
+		jsonWriter := c.logger.GetJSONWriter()
+		jsonWriter.EmitComplete(api.NewCompleteEvent(
+			c.stats.failedFiles == 0,
+			c.stats.totalFiles,
+			c.stats.processedFiles,
+			c.stats.failedFiles,
+			c.stats.skippedFiles,
+			duration,
+			"",
+		))
+
+		// Emit statistics
+		if c.stats.processedSizeMB > 0 {
+			compressionRatio := c.stats.savedSizeMB / c.stats.processedSizeMB
+			jsonWriter.EmitStatistics(api.StatisticsEvent{
+				ImagesConverted:  c.stats.processedFiles - c.stats.failedFiles,
+				VideosConverted:  0, // TODO: track separately
+				FilesCopied:      0,
+				FilesSkipped:     c.stats.skippedFiles,
+				DuplicatesFound:  0,
+				TotalInputSize:   int64(c.stats.processedSizeMB * 1024 * 1024),
+				TotalOutputSize:  int64(c.stats.outputSizeMB * 1024 * 1024),
+				SpaceSaved:       int64(c.stats.savedSizeMB * 1024 * 1024),
+				CompressionRatio: compressionRatio,
+				AverageSpeed:     "",
+				TotalDuration:    duration.String(),
+			})
+		}
 	}
 }
 

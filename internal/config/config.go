@@ -18,6 +18,7 @@ type Config struct {
 	DryRun         bool
 	CopyOnly       bool
 	VerifyChecksum bool
+	JSONMode       bool // Enable JSON output for Tauri integration
 
 	// Image settings
 	PhotoFormat      string
@@ -65,6 +66,7 @@ func NewConfig() *Config {
 	viper.SetDefault("dry_run", false)
 	viper.SetDefault("copy_only", false)
 	viper.SetDefault("verify_checksum", false)
+	viper.SetDefault("json_mode", false)
 	viper.SetDefault("photo_format", "avif")
 	viper.SetDefault("photo_quality_avif", 80)
 	viper.SetDefault("photo_quality_webp", 85)
@@ -92,6 +94,7 @@ func NewConfig() *Config {
 		DryRun:                 viper.GetBool("dry_run"),
 		CopyOnly:               viper.GetBool("copy_only"),
 		VerifyChecksum:         viper.GetBool("verify_checksum"),
+		JSONMode:               viper.GetBool("json_mode"),
 		PhotoFormat:            viper.GetString("photo_format"),
 		PhotoQualityAVIF:       viper.GetInt("photo_quality_avif"),
 		PhotoQualityWebP:       viper.GetInt("photo_quality_webp"),
