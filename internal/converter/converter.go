@@ -418,12 +418,24 @@ func (c *Converter) showOverallProgress() {
 
 	elapsed := time.Since(c.stats.startTime)
 	var eta string
+	var etaDuration string
 	if c.stats.processedFiles > 0 {
 		avgTimePerFile := elapsed / time.Duration(c.stats.processedFiles)
 		remaining := time.Duration(c.stats.totalFiles-c.stats.processedFiles) * avgTimePerFile
-		eta = fmt.Sprintf("ETA: %v", c.formatDuration(remaining))
+		etaDuration = c.formatDuration(remaining)
+		eta = fmt.Sprintf("ETA: %v", etaDuration)
 	} else {
 		eta = "ETA: --:--"
+		etaDuration = ""
+	}
+
+	// Emit progress event in JSON mode
+	if c.logger.IsJSONMode() {
+		c.logger.GetJSONWriter().EmitProgress(api.NewProgressEvent(
+			c.stats.processedFiles,
+			c.stats.totalFiles,
+			etaDuration,
+		))
 	}
 
 	c.logger.Info(fmt.Sprintf("📈 Progress: [%s] %d/%d (%.1f%%) | %s",

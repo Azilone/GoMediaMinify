@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kevindurb/media-converter/internal/api"
 	"github.com/kevindurb/media-converter/internal/utils"
 )
 
@@ -26,11 +27,56 @@ func (c *Converter) convertFile(inputPath, fileType string) error {
 func (c *Converter) convertImage(inputPath string) error {
 	filename := filepath.Base(inputPath)
 	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+	startTime := time.Now()
+
+	// Get file size early for JSON event
+	fileInfo, _ := os.Stat(inputPath)
+	fileSize := int64(0)
+	if fileInfo != nil {
+		fileSize = fileInfo.Size()
+	}
+
+	// Emit file_start event in JSON mode
+	if c.logger.IsJSONMode() {
+		c.logger.GetJSONWriter().EmitFileStart(api.NewFileStartEvent(
+			inputPath,
+			filename,
+			fileSize,
+			"image",
+			"convert",
+		))
+	}
+
+	// Track success/failure for file_end event
+	var convertSuccess bool
+	var outputPath string
+	var outputSize int64
+	var compressionRatio float64
+	var errorMsg string
+
+	// Ensure file_end event is always emitted
+	defer func() {
+		if c.logger.IsJSONMode() {
+			duration := time.Since(startTime)
+			c.logger.GetJSONWriter().EmitFileEnd(api.NewFileEndEvent(
+				inputPath,
+				filename,
+				convertSuccess,
+				outputPath,
+				outputSize,
+				compressionRatio,
+				duration,
+				errorMsg,
+				"",
+			))
+		}
+	}()
 
 	// CRITICAL: Extract date from original file BEFORE conversion
 	// This prevents using the conversion timestamp instead of the original photo date
 	fileDate, err := utils.GetFileDate(inputPath)
 	if err != nil {
+		errorMsg = fmt.Sprintf("unable to determine file date: %v", err)
 		c.logger.Warn(fmt.Sprintf("Could not extract date from %s: %v - skipping file", filename, err))
 		return fmt.Errorf("unable to determine file date: %w", err)
 	}
@@ -46,13 +92,21 @@ func (c *Converter) convertImage(inputPath string) error {
 	baseOutputPath := filepath.Join(destPath, baseName)
 
 	// Check if file already exists and is valid (idempotency check with integrity verification)
-	if _, err := os.Stat(baseOutputPath); err == nil {
+	if existingInfo, err := os.Stat(baseOutputPath); err == nil {
 		// File exists, but verify it's not corrupted
 		if !c.security.IsFileCorrupted(baseOutputPath, "photo") {
 			c.logger.Info(fmt.Sprintf("📷 %s -> %s (already exists and valid, skipping)", filename, baseName))
 			c.stats.mu.Lock()
 			c.stats.skippedFiles++
 			c.stats.mu.Unlock()
+
+			// Mark as successful skip for JSON mode
+			convertSuccess = true
+			outputPath = baseOutputPath
+			outputSize = existingInfo.Size()
+			if fileSize > 0 {
+				compressionRatio = 1.0 - float64(outputSize)/float64(fileSize)
+			}
 			return nil
 		} else {
 			// File is corrupted, remove it and proceed with conversion
@@ -66,7 +120,7 @@ func (c *Converter) convertImage(inputPath string) error {
 
 	// Use the base name for conversion
 	cleanName := baseName
-	outputPath := baseOutputPath
+	outputPath = baseOutputPath
 	tempPath := outputPath + ".tmp"
 
 	// Dry run mode
@@ -75,9 +129,8 @@ func (c *Converter) convertImage(inputPath string) error {
 		return nil
 	}
 
-	// Get file size for progress tracking
-	fileInfo, _ := os.Stat(inputPath)
-	fileSizeMB := float64(fileInfo.Size()) / (1024 * 1024)
+	// Get file size for progress tracking (fileInfo already declared above)
+	fileSizeMB := float64(fileSize) / (1024 * 1024)
 
 	// Show initial progress
 	c.logger.Info(fmt.Sprintf("📷 %s (%.1f MB) -> %s", filename, fileSizeMB, c.config.PhotoFormat))
@@ -96,7 +149,7 @@ func (c *Converter) convertImage(inputPath string) error {
 	}()
 
 	// Convert to temporary file with timeout
-	startTime := time.Now()
+	conversionStartTime := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), c.config.ConversionTimeoutPhoto)
 	defer cancel()
 
@@ -128,7 +181,7 @@ func (c *Converter) convertImage(inputPath string) error {
 		return fmt.Errorf("conversion failed: %w", err)
 	}
 
-	conversionTime := time.Since(startTime)
+	conversionTime := time.Since(conversionStartTime)
 
 	// Verify temporary file integrity
 	if err := c.security.VerifyOutputFile(inputPath, tempPath, "photo", c.config.PhotoFormat); err != nil {
@@ -156,6 +209,11 @@ func (c *Converter) convertImage(inputPath string) error {
 
 	// Update size statistics
 	c.updateSizeStats(fileSizeMB, newFileSizeMB)
+
+	// Mark conversion as successful for JSON mode
+	convertSuccess = true
+	outputSize = newInfo.Size()
+	compressionRatio = float64(reduction) / 100.0
 
 	// Safe deletion if requested
 	if !c.config.KeepOriginals {

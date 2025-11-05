@@ -67,7 +67,7 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 			return err
 		}
 
-		// Initialize logger
+		// Initialize logger FIRST (so errors can be in JSON mode)
 		logPath := filepath.Join(cfg.DestDir, "conversion.log")
 		var err error
 		log, err = logger.NewLoggerWithMode(logPath, cfg.JSONMode)
@@ -75,9 +75,19 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 			return fmt.Errorf("failed to initialize logger: %w", err)
 		}
 
-		// Check dependencies
-		if err := utils.CheckDependencies(); err != nil {
-			return fmt.Errorf("dependency check failed: %w", err)
+		// Check dependencies (skip for copy-only mode)
+		if !cfg.CopyOnly {
+			if err := utils.CheckDependencies(); err != nil {
+				// Emit error in JSON mode
+				if cfg.JSONMode {
+					log.GetJSONWriter().EmitError(
+						fmt.Sprintf("dependency check failed: %v", err),
+						"",
+						true,
+					)
+				}
+				return fmt.Errorf("dependency check failed: %w", err)
+			}
 		}
 
 		return nil
@@ -98,7 +108,12 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// Try to emit error in JSON mode if logger is initialized
+		if log != nil && log.IsJSONMode() {
+			log.GetJSONWriter().EmitError(err.Error(), "", true)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
