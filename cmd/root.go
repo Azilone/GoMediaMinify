@@ -30,16 +30,33 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 		cfg.SourceDir = args[0]
 		cfg.DestDir = args[1]
 
-		// Validate directories
-		if _, err := os.Stat(cfg.SourceDir); os.IsNotExist(err) {
-			return fmt.Errorf("source directory does not exist: %s", cfg.SourceDir)
-		}
-
-		// Create destination directory if it doesn't exist
+		// Create destination directory early (needed for logger)
 		if err := os.MkdirAll(cfg.DestDir, 0755); err != nil {
+			// Can't emit JSON yet, no logger
 			return fmt.Errorf("failed to create destination directory: %w", err)
 		}
 
+		// Initialize logger FIRST (before any validation that might fail)
+		logPath := filepath.Join(cfg.DestDir, "conversion.log")
+		var err error
+		log, err = logger.NewLoggerWithMode(logPath, cfg.JSONMode)
+		if err != nil {
+			return fmt.Errorf("failed to initialize logger: %w", err)
+		}
+
+		// Now validate directories (errors will be in JSON if json-mode is enabled)
+		if _, err := os.Stat(cfg.SourceDir); os.IsNotExist(err) {
+			if cfg.JSONMode {
+				log.GetJSONWriter().EmitError(
+					fmt.Sprintf("source directory does not exist: %s", cfg.SourceDir),
+					"",
+					true,
+				)
+			}
+			return fmt.Errorf("source directory does not exist: %s", cfg.SourceDir)
+		}
+
+		// Check for incompatible flags in copy-only mode
 		if cfg.CopyOnly {
 			incompatible := []string{
 				"photo-format",
@@ -58,21 +75,20 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 			}
 			for _, name := range incompatible {
 				if cmd.Flags().Changed(name) {
-					return fmt.Errorf("--%s cannot be used with --copy-only mode", name)
+					errMsg := fmt.Sprintf("--%s cannot be used with --copy-only mode", name)
+					if cfg.JSONMode {
+						log.GetJSONWriter().EmitError(errMsg, "", true)
+					}
+					return fmt.Errorf(errMsg)
 				}
 			}
 		}
 
 		if err := cfg.Validate(); err != nil {
+			if cfg.JSONMode {
+				log.GetJSONWriter().EmitError(err.Error(), "", true)
+			}
 			return err
-		}
-
-		// Initialize logger FIRST (so errors can be in JSON mode)
-		logPath := filepath.Join(cfg.DestDir, "conversion.log")
-		var err error
-		log, err = logger.NewLoggerWithMode(logPath, cfg.JSONMode)
-		if err != nil {
-			return fmt.Errorf("failed to initialize logger: %w", err)
 		}
 
 		// Check dependencies (skip for copy-only mode)
@@ -107,11 +123,25 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 }
 
 func Execute() {
+	// Check if --json-mode is present in args to silence Cobra's default output
+	jsonMode := false
+	for _, arg := range os.Args {
+		if arg == "--json-mode" {
+			jsonMode = true
+			break
+		}
+	}
+
+	if jsonMode {
+		// Silence Cobra's default error and usage output in JSON mode
+		rootCmd.SilenceUsage = true
+		rootCmd.SilenceErrors = true
+	}
+
 	if err := rootCmd.Execute(); err != nil {
-		// Try to emit error in JSON mode if logger is initialized
-		if log != nil && log.IsJSONMode() {
-			log.GetJSONWriter().EmitError(err.Error(), "", true)
-		} else {
+		// In JSON mode, errors are already emitted in PreRunE/RunE
+		// Only emit here if NOT in JSON mode
+		if !jsonMode {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
 		os.Exit(1)
