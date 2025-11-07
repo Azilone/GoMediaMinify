@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kevindurb/media-converter/internal/api"
 	"github.com/kevindurb/media-converter/internal/checksum"
 	"github.com/kevindurb/media-converter/internal/utils"
 )
@@ -105,6 +106,19 @@ func (c *Converter) runCopyMode() error {
 	c.logger.Info(fmt.Sprintf("📸 Photos queued: %d", len(photoFiles)))
 	c.logger.Info(fmt.Sprintf("🎬 Videos queued: %d", len(videoFiles)))
 	c.logger.Info(fmt.Sprintf("📁 Total files: %d", len(files)))
+
+	// Emit started event in JSON mode
+	if c.logger.IsJSONMode() {
+		c.logger.GetJSONWriter().EmitStarted(api.NewStartedEvent(
+			c.config.SourceDir,
+			c.config.DestDir,
+			len(files),
+			"copy-only",
+			c.config.DryRun,
+			c.config.KeepOriginals,
+			c.config.OrganizeByDate,
+		))
+	}
 
 	if len(files) == 0 {
 		c.logger.Warn("No media files found to copy")
@@ -361,11 +375,14 @@ func (c *Converter) loadExistingChecksums() (int, error) {
 func (c *Converter) showCopySummary(stats *copyStats) {
 	duration := time.Since(c.stats.startTime)
 
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
-	fmt.Println("║                 Copy-Only Mode Complete                      ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
-	fmt.Println()
+	// Skip ASCII banner in JSON mode
+	if !c.logger.IsJSONMode() {
+		fmt.Println()
+		fmt.Println("╔══════════════════════════════════════════════════════════════╗")
+		fmt.Println("║                 Copy-Only Mode Complete                      ║")
+		fmt.Println("╚══════════════════════════════════════════════════════════════╝")
+		fmt.Println()
+	}
 
 	c.logger.Success(fmt.Sprintf("✅ Files processed: %d/%d", c.stats.processedFiles, c.stats.totalFiles))
 	if stats.copied > 0 {
@@ -389,7 +406,40 @@ func (c *Converter) showCopySummary(stats *copyStats) {
 		c.logger.Info(fmt.Sprintf("🔐 Time spent on checksum verification: %v", stats.checksumDuration.Round(time.Second)))
 	}
 
-	fmt.Println()
+	if !c.logger.IsJSONMode() {
+		fmt.Println()
+	}
 	c.logger.Info(fmt.Sprintf("📁 Archived files in: %s", c.config.DestDir))
 	c.logger.Info(fmt.Sprintf("📄 Detailed logs: %s/conversion.log", c.config.DestDir))
+
+	// Emit complete and statistics events in JSON mode
+	if c.logger.IsJSONMode() {
+		jsonWriter := c.logger.GetJSONWriter()
+
+		// Complete event
+		jsonWriter.EmitComplete(api.NewCompleteEvent(
+			stats.failed == 0,
+			c.stats.totalFiles,
+			c.stats.processedFiles,
+			stats.failed,
+			c.stats.skippedFiles+stats.duplicates,
+			duration,
+			"",
+		))
+
+		// Statistics event
+		jsonWriter.EmitStatistics(api.StatisticsEvent{
+			ImagesConverted:  0,
+			VideosConverted:  0,
+			FilesCopied:      stats.copied,
+			FilesSkipped:     c.stats.skippedFiles + stats.duplicates,
+			DuplicatesFound:  stats.duplicates,
+			TotalInputSize:   stats.totalBytes,
+			TotalOutputSize:  stats.copiedBytes,
+			SpaceSaved:       0,
+			CompressionRatio: 0,
+			AverageSpeed:     "",
+			TotalDuration:    duration.String(),
+		})
+	}
 }

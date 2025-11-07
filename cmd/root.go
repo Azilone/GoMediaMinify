@@ -30,16 +30,33 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 		cfg.SourceDir = args[0]
 		cfg.DestDir = args[1]
 
-		// Validate directories
-		if _, err := os.Stat(cfg.SourceDir); os.IsNotExist(err) {
-			return fmt.Errorf("source directory does not exist: %s", cfg.SourceDir)
-		}
-
-		// Create destination directory if it doesn't exist
+		// Create destination directory early (needed for logger)
 		if err := os.MkdirAll(cfg.DestDir, 0755); err != nil {
+			// Can't emit JSON yet, no logger
 			return fmt.Errorf("failed to create destination directory: %w", err)
 		}
 
+		// Initialize logger FIRST (before any validation that might fail)
+		logPath := filepath.Join(cfg.DestDir, "conversion.log")
+		var err error
+		log, err = logger.NewLoggerWithMode(logPath, cfg.JSONMode)
+		if err != nil {
+			return fmt.Errorf("failed to initialize logger: %w", err)
+		}
+
+		// Now validate directories (errors will be in JSON if json-mode is enabled)
+		if _, err := os.Stat(cfg.SourceDir); os.IsNotExist(err) {
+			if cfg.JSONMode {
+				log.GetJSONWriter().EmitError(
+					fmt.Sprintf("source directory does not exist: %s", cfg.SourceDir),
+					"",
+					true,
+				)
+			}
+			return fmt.Errorf("source directory does not exist: %s", cfg.SourceDir)
+		}
+
+		// Check for incompatible flags in copy-only mode
 		if cfg.CopyOnly {
 			incompatible := []string{
 				"photo-format",
@@ -58,26 +75,35 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 			}
 			for _, name := range incompatible {
 				if cmd.Flags().Changed(name) {
-					return fmt.Errorf("--%s cannot be used with --copy-only mode", name)
+					errMsg := fmt.Sprintf("--%s cannot be used with --copy-only mode", name)
+					if cfg.JSONMode {
+						log.GetJSONWriter().EmitError(errMsg, "", true)
+					}
+					return fmt.Errorf(errMsg)
 				}
 			}
 		}
 
 		if err := cfg.Validate(); err != nil {
+			if cfg.JSONMode {
+				log.GetJSONWriter().EmitError(err.Error(), "", true)
+			}
 			return err
 		}
 
-		// Initialize logger
-		logPath := filepath.Join(cfg.DestDir, "conversion.log")
-		var err error
-		log, err = logger.NewLogger(logPath)
-		if err != nil {
-			return fmt.Errorf("failed to initialize logger: %w", err)
-		}
-
-		// Check dependencies
-		if err := utils.CheckDependencies(); err != nil {
-			return fmt.Errorf("dependency check failed: %w", err)
+		// Check dependencies (skip for copy-only mode)
+		if !cfg.CopyOnly {
+			if err := utils.CheckDependencies(); err != nil {
+				// Emit error in JSON mode
+				if cfg.JSONMode {
+					log.GetJSONWriter().EmitError(
+						fmt.Sprintf("dependency check failed: %v", err),
+						"",
+						true,
+					)
+				}
+				return fmt.Errorf("dependency check failed: %w", err)
+			}
 		}
 
 		return nil
@@ -97,8 +123,27 @@ and videos to efficient codecs (H.265, AV1) with built-in safety checks and file
 }
 
 func Execute() {
+	// Check if --json-mode is present in args to silence Cobra's default output
+	jsonMode := false
+	for _, arg := range os.Args {
+		if arg == "--json-mode" {
+			jsonMode = true
+			break
+		}
+	}
+
+	if jsonMode {
+		// Silence Cobra's default error and usage output in JSON mode
+		rootCmd.SilenceUsage = true
+		rootCmd.SilenceErrors = true
+	}
+
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// In JSON mode, errors are already emitted in PreRunE/RunE
+		// Only emit here if NOT in JSON mode
+		if !jsonMode {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -115,6 +160,7 @@ func init() {
 	rootCmd.Flags().IntP("jobs", "j", 0, "Number of parallel jobs (default: CPU cores - 1)")
 	rootCmd.Flags().Bool("copy-only", false, "Copy files without conversion (archive mode)")
 	rootCmd.Flags().Bool("verify-checksum", false, "Verify file integrity using checksums")
+	rootCmd.Flags().Bool("json-mode", false, "Enable JSON output for Tauri integration (streaming events to stdout)")
 
 	// Image conversion flags
 	rootCmd.Flags().String("photo-format", "avif", "Output format for photos (avif, webp)")
@@ -150,6 +196,7 @@ func init() {
 	viper.BindPFlag("max_jobs", rootCmd.Flags().Lookup("jobs"))
 	viper.BindPFlag("copy_only", rootCmd.Flags().Lookup("copy-only"))
 	viper.BindPFlag("verify_checksum", rootCmd.Flags().Lookup("verify-checksum"))
+	viper.BindPFlag("json_mode", rootCmd.Flags().Lookup("json-mode"))
 	viper.BindPFlag("photo_format", rootCmd.Flags().Lookup("photo-format"))
 	viper.BindPFlag("photo_quality_avif", rootCmd.Flags().Lookup("photo-quality-avif"))
 	viper.BindPFlag("photo_quality_webp", rootCmd.Flags().Lookup("photo-quality-webp"))
