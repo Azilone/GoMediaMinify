@@ -3,10 +3,10 @@
   
   # GoMediaMinify
   
-  **Preserve your memories efficiently with modern codecs like AVIF and H.265. Great visual quality, minimal storage space.**
+  **Prepare your media library for cloud backup: strong space reduction, clean date-based organization, and safe originals.**
 </div>
 
-GoMediaMinify is an open-source command-line utility for shrinking everyday photo and video libraries with modern codecs like AVIF, WebP, H.265, and AV1. It keeps your originals untouched, organizes new files by capture date, and resumes large conversions automatically so home archives stay tidy without manual effort.
+GoMediaMinify is an open-source command-line utility to **prepare camera and phone libraries for cloud backup**. It reduces file size with modern codecs (AVIF, WebP, H.265, AV1), keeps originals untouched, organizes files by capture date, and safely resumes interrupted runs. The goal is simple: preserve visual quality while making large libraries easier and cheaper to store in services like Google Photos.
 
 > ⚠️ GoMediaMinify uses modern **lossy** codecs (AVIF, H.265) to shrink your photos and videos. This means the output isn't pixel-for-pixel identical to RAW or original files, but it's visually very close while dramatically reducing size—perfect for cloud backups like Google Photos.
 
